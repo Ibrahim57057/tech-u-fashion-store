@@ -29,13 +29,30 @@ const nodeEnv = process.env.NODE_ENV || 'development';
 // should be able to `npm run dev` with nothing configured.
 if (nodeEnv === 'production') {
     required('MONGO_URI');
-    required('JWT_SECRET');
     required('CLIENT_URL');
     required('PAYSTACK_SECRET_KEY');
     required('RESEND_API_KEY');
 
-    if (process.env.JWT_SECRET.length < 32) {
-        throw new Error('JWT_SECRET must be at least 32 characters in production');
+    const jwtSecret = required('JWT_SECRET');
+
+    // Pasted env vars very often arrive with a stray trailing newline or an
+    // unbalanced quote, and that is invisible in a dashboard. It would still be
+    // long enough to pass a length check while being the wrong value, so say so
+    // explicitly rather than letting it fail later as a mystery 500.
+    if (jwtSecret !== jwtSecret.trim() || /^["'].*["']$/.test(jwtSecret)) {
+        throw new Error(
+            'JWT_SECRET has surrounding whitespace or quotes. Paste the raw value with no ' +
+                'leading/trailing space and no wrapping quotes.',
+        );
+    }
+
+    // 32 characters = 256 bits, the minimum HS256 key size. The length is
+    // reported (never the value) so the failure is diagnosable from the log.
+    if (jwtSecret.length < 32) {
+        throw new Error(
+            `JWT_SECRET must be at least 32 characters in production (got ${jwtSecret.length}). ` +
+                'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64url\'))"',
+        );
     }
 
     if (clientUrls.some((url) => url.includes('localhost') || url.includes('127.0.0.1'))) {
