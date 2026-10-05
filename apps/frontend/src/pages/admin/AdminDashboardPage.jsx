@@ -24,6 +24,14 @@ export default function AdminDashboardPage() {
   const { stats, topProducts, isLoading } = useAdminStats();
   const { data: revenueByDay } = useRevenueByDay();
 
+  if (!isLoading && !stats) {
+    return (
+      <p className='text-sm text-danger'>
+        Could not load dashboard data. Try logging in again.
+      </p>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className='grid grid-cols-2 md:grid-cols-3 gap-4'>

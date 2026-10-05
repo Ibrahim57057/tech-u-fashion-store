@@ -15,11 +15,12 @@ import {
 // can't read it (protecting against XSS stealing it), but the browser
 // automatically sends it back on every request to our API.
 function sendTokenCookie(res, token) {
+    const isProd = env.nodeEnv === 'production';
     res.cookie('token', token, {
         httpOnly: true,
-        secure: env.nodeEnv === 'production', // HTTPS-only once deployed
-        sameSite: 'lax',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days, in milliseconds
+        secure: isProd, // SameSite: 'none' requires Secure, browsers reject it otherwise
+        sameSite: isProd ? 'none' : 'lax',
+        maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 }
 
