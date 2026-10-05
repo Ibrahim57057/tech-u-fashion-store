@@ -10,6 +10,8 @@ build/
 # The secret values live in Render's dashboard for production and in
 # apps/backend/.env locally. See apps/backend/.gitignore as well; both are
 # needed because this file is the one that covers the repo root.
+#
+# .env.example IS tracked on purpose — it's the template, with no real values.
 .env
 .env.local
 .env.*.local

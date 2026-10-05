@@ -1,0 +1,70 @@
+# Render blueprint. Applying this creates BOTH services with the build and
+# routing settings they need, so nothing has to be remembered by hand.
+#
+# After `Apply`, Render will show a value box for every variable marked
+# `sync: false`. Fill those in — the placeholders below are NOT real secrets.
+#
+# The two services point at each other:
+#   backend  CLIENT_URL     -> the frontend's URL
+#   frontend VITE_API_URL   -> the backend's URL + /api/v1
+# Getting these crossed is the most common way a deploy half-works: the API
+# answers, but CORS rejects the browser.
+
+services:
+  # ---------------------------------------------------------------- backend
+  - type: web
+    name: tech-u-api
+    runtime: node
+    rootDir: apps/backend
+    plan: free
+    # `npm ci` installs exactly what package-lock.json pins, rather than
+    # letting npm resolve fresh versions on the deploy machine.
+    buildCommand: npm ci
+    # `npm start`, not `npm run dev` — dev is `node --watch`, which restarts the
+    # process on every file change. On Render nothing changes at runtime, so the
+    # watcher only wastes memory and can drop in-flight requests on a restart.
+    startCommand: npm start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render injects PORT automatically and expects the app to listen on it.
+      # env.js already reads PORT, so this needs no value here.
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      # Paste the frontend's URL after its first deploy, e.g.
+      # https://tech-u-store.onrender.com
+      - key: CLIENT_URL
+        sync: false
+
+  # --------------------------------------------------------------- frontend
+  - type: web
+    name: tech-u-store
+    runtime: static
+    rootDir: apps/frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    # React Router serves every page from one HTML file, so a direct hit on
+    # /products/anything or a page refresh would 404 without this rewrite.
+    routes:
+      - type: rewrite
+        destination: /index.html
+    envVars:
+      # Read at BUILD time, not at runtime — Vite inlines it into the bundle.
+      # Changing this later requires a new build, not just a restart.
+      # Paste the backend's URL plus /api/v1, e.g.
+      # https://tech-u-api.onrender.com/api/v1
+      - key: VITE_API_URL
+        sync: false

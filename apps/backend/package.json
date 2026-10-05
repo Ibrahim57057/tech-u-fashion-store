@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
     "test": "vitest run",
     "seed": "node src/seed.js",
     "migrate:email": "node scripts/migrateCanonicalEmail.js"
