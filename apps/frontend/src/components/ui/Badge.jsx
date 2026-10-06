@@ -1,5 +1,5 @@
 const baseStyles =
-  "inline-flex items-center gap-1 font-body font-medium text-xs px-2.5 py-1 rounded-full";
+  "inline-flex items-center gap-1 font-body font-medium text-xs px-2.5 py-1 rounded-full whitespace-nowrap";
 
 const variantStyles = {
   success: "bg-green-100 text-success",

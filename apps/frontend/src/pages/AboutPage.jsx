@@ -8,7 +8,7 @@ export default function AboutPage() {
   });
 
   return (
-    <div className='px-6 py-16 max-w-3xl mx-auto'>
+    <div className='px-4 sm:px-6 py-16 max-w-3xl mx-auto'>
       <FadeIn>
         <h1 className='font-display font-bold text-3xl text-brand-dark mb-6'>
           About TECH-U

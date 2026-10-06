@@ -36,7 +36,7 @@ export default function AccountPage() {
   }
 
   return (
-    <div className='px-6 py-10 max-w-3xl mx-auto'>
+    <div className='px-4 sm:px-6 py-10 max-w-3xl mx-auto'>
       <div className='flex items-center justify-between mb-8'>
         <div>
           <h1 className='font-display font-bold text-2xl text-brand-dark'>
@@ -113,9 +113,9 @@ const statusStyles = {
 function OrderRow({ order }) {
   return (
     <div className='border border-neutral-200 rounded-card p-4'>
-      <div className='flex items-center justify-between'>
-        <div>
-          <p className='font-medium text-brand-dark text-sm'>
+      <div className='flex items-center justify-between gap-3'>
+        <div className='min-w-0'>
+          <p className='font-medium text-brand-dark text-sm truncate'>
             {order.orderNumber}
           </p>
           <p className='text-xs text-neutral-500'>
@@ -127,7 +127,7 @@ function OrderRow({ order }) {
           </p>
         </div>
         <span
-          className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+          className={`text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap shrink-0 ${
             statusStyles[order.status] || "bg-neutral-100 text-neutral-600"
           }`}>
           {order.status.replace(/_/g, " ")}

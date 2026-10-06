@@ -67,3 +67,31 @@ export const paymentLimiter = perUserLimiter({
     max: 8,
     message: 'Too many payment attempts. Please wait a few minutes and try again.',
 });
+
+/**
+ * POST /auth/forgot-password. Unauthenticated, so perUserKey falls back to the
+ * IP — which is the right key here anyway, since the thing being rate-limited
+ * is the mail we send out, not an account.
+ *
+ * Five links in fifteen minutes is far beyond a person who mistyped their
+ * address once. Without it this endpoint is an open relay: anyone can make
+ * Resend send mail to any address claiming to be from us, and a few hundred
+ * of those will get the sending domain suspended.
+ */
+export const forgotPasswordLimiter = perUserLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: 'Too many reset requests. Please wait a few minutes and try again.',
+});
+
+/**
+ * POST /auth/reset-password. The token is 256 bits and cannot be guessed, so
+ * this is not really about brute force — it is a cheap guard on a cheap
+ * endpoint, and it bounds how fast a caller can throw malformed tokens at the
+ * hashing comparison.
+ */
+export const resetPasswordLimiter = perUserLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: 'Too many reset attempts. Please request a new link and try again.',
+});

@@ -26,7 +26,7 @@ export default function HomePage() {
         </FadeIn>
       </section>
 
-      <section className='px-6 py-10 max-w-6xl mx-auto'>
+      <section className='px-4 sm:px-6 py-10 max-w-6xl mx-auto'>
         <h2 className='font-display font-bold text-xl text-brand-dark mb-4'>
           New arrivals
         </h2>

@@ -26,6 +26,8 @@ const CheckoutPage = lazy(() => import("./pages/CheckoutPage.jsx"));
 const OrderConfirmationPage = lazy(() => import("./pages/OrderConfirmationPage.jsx"));
 const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage.jsx"));
+const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage.jsx"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage.jsx"));
 const AccountPage = lazy(() => import("./pages/AccountPage.jsx"));
 const WishlistPage = lazy(() => import("./pages/WishlistPage.jsx"));
 const AboutPage = lazy(() => import("./pages/AboutPage.jsx"));
@@ -109,6 +111,11 @@ export default function App() {
               />
               <Route path='/login' element={<LoginPage />} />
               <Route path='/register' element={<RegisterPage />} />
+              {/* Reached from the emailed link, so these must resolve on a
+                  cold load with no SPA session — vercel.json rewrites them
+                  to index.html for that reason. */}
+              <Route path='/forgot-password' element={<ForgotPasswordPage />} />
+              <Route path='/reset-password' element={<ResetPasswordPage />} />
               <Route path='/account' element={<AccountPage />} />
               <Route path='/wishlist' element={<WishlistPage />} />
               <Route path='/about' element={<AboutPage />} />

@@ -3,7 +3,7 @@ import Button from "../components/ui/Button.jsx";
 
 export default function NotFoundPage() {
   return (
-    <div className='px-6 py-24 text-center'>
+    <div className='px-4 sm:px-6 py-24 text-center'>
       <h1 className='font-display font-extrabold text-6xl text-brand-dark mb-2'>
         404
       </h1>

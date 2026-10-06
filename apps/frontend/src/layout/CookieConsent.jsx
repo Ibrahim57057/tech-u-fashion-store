@@ -20,7 +20,11 @@ export default function CookieConsent() {
   if (!visible) return null;
 
   return (
-    <div className='fixed bottom-0 left-0 right-0 z-40 bg-brand-dark text-white px-4 py-4 md:px-6 flex flex-col md:flex-row items-center gap-3 justify-between'>
+    // bottom-16 on mobile, bottom-0 from md up. The bottom nav is
+    // `md:hidden fixed bottom-0`, so at bottom-0 the banner sat on top of
+    // Home/Shop/Cart/Account and the page could not be navigated until it
+    // was dismissed. 64px clears the nav; from md the nav is gone.
+    <div className='fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-brand-dark text-white px-4 py-4 md:px-6 flex flex-col md:flex-row items-center gap-3 justify-between'>
       <p className='text-sm text-neutral-300'>
         We use cookies to improve your shopping experience. By using TECH-U, you
         agree to our{" "}

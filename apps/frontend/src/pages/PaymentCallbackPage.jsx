@@ -52,7 +52,7 @@ export default function PaymentCallbackPage() {
 
   if (!missingReference && status === "checking") {
     return (
-      <div className='px-6 py-24 text-center'>
+      <div className='px-4 sm:px-6 py-24 text-center'>
         <Loader2 className='w-10 h-10 text-brand-accent mx-auto mb-4 animate-spin' />
         <p className='text-neutral-600'>Confirming your payment…</p>
       </div>
@@ -61,7 +61,7 @@ export default function PaymentCallbackPage() {
 
   if (!missingReference && status === "success") {
     return (
-      <div className='px-6 py-16 max-w-md mx-auto text-center'>
+      <div className='px-4 sm:px-6 py-16 max-w-md mx-auto text-center'>
         <CheckCircle className='w-14 h-14 text-success mx-auto mb-4' />
         <h1 className='font-display font-bold text-2xl text-brand-dark mb-2'>
           Payment received
@@ -83,7 +83,7 @@ export default function PaymentCallbackPage() {
   }
 
   return (
-    <div className='px-6 py-16 max-w-md mx-auto text-center'>
+    <div className='px-4 sm:px-6 py-16 max-w-md mx-auto text-center'>
       <XCircle className='w-14 h-14 text-danger mx-auto mb-4' />
       <h1 className='font-display font-bold text-2xl text-brand-dark mb-2'>
         Payment not confirmed

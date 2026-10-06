@@ -25,16 +25,19 @@ export default function RevenueCard({ totalRevenue, revenueByDay }) {
   const sparklineData = (revenueByDay || []).map((d) => ({ value: d.revenue }));
 
   return (
-    <div className='relative overflow-hidden rounded-card bg-gradient-to-br from-brand-dark to-neutral-800 text-white p-6'>
-      <div className='flex items-start justify-between'>
-        <div>
+    <div className='relative overflow-hidden rounded-card bg-gradient-to-br from-brand-dark to-neutral-800 text-white p-4 sm:p-6'>
+      {/* Stacks below sm. Side by side, the sparkline's fixed w-28 and an
+          unbreakable naira figure had to share 224px, so the revenue total
+          was the thing that got clipped by overflow-hidden. */}
+      <div className='flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4'>
+        <div className='min-w-0'>
           <div className='flex items-center gap-2 mb-2'>
             <div className='bg-white/10 p-2 rounded-card'>
               <Wallet className='w-5 h-5 text-brand-accent' />
             </div>
             <p className='text-sm text-neutral-300'>Total revenue</p>
           </div>
-          <p className='font-display font-bold text-3xl md:text-4xl'>
+          <p className='font-display font-bold text-2xl sm:text-3xl md:text-4xl break-words'>
             {formatNaira(totalRevenue)}
           </p>
 

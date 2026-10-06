@@ -34,7 +34,7 @@ export default function AdminDashboardPage() {
 
   if (isLoading) {
     return (
-      <div className='grid grid-cols-2 md:grid-cols-3 gap-4'>
+      <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4'>
         {Array.from({ length: 6 }).map((_, i) => (
           <Skeleton key={i} className='h-20' />
         ))}
@@ -57,7 +57,7 @@ export default function AdminDashboardPage() {
         </Suspense>
       </div>
 
-      <div className='grid grid-cols-2 md:grid-cols-4 gap-4 mb-10'>
+      <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-10'>
         <StatCard
           label='Total orders'
           value={stats.totalOrders}

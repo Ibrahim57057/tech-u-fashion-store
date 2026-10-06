@@ -86,13 +86,16 @@ function MessageRow({ message }) {
         type='button'
         onClick={toggle}
         className='w-full flex items-center justify-between p-4 text-left'>
-        <div className='flex items-start gap-3'>
+        {/* min-w-0 + truncate: an email address is one unbreakable token,
+            and without a width limit it pushed the badge and date out of
+            the card. */}
+        <div className='flex items-start gap-3 min-w-0 flex-1 pr-3'>
           {message.status === "new" ? (
             <Mail className='w-4 h-4 text-brand-accent shrink-0 mt-0.5' />
           ) : (
             <MailOpen className='w-4 h-4 text-neutral-400 shrink-0 mt-0.5' />
           )}
-          <div>
+          <div className='min-w-0'>
             <p
               className={`text-sm ${
                 message.status === "new"
@@ -101,7 +104,7 @@ function MessageRow({ message }) {
               }`}>
               {message.name}
             </p>
-            <p className='text-xs text-neutral-500'>
+            <p className='text-xs text-neutral-500 truncate'>
               {message.email} · {message.subject}
             </p>
           </div>

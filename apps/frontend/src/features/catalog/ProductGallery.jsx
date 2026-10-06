@@ -21,7 +21,12 @@ export default function ProductGallery({ images, alt }) {
         </AnimatePresence>
       </div>
 
-      <div className='flex gap-2 mt-3'>
+      {/* overflow-x-auto: the thumbs are shrink-0, so with four or more
+          photos their combined width is the row's min-content — which
+          propagated up and widened the grid column past the viewport. As a
+          scroll container the row clips to its own box and the page stays
+          put. */}
+      <div className='flex gap-2 mt-3 overflow-x-auto pb-1'>
         {images.map((src, index) => (
           <button
             key={src}

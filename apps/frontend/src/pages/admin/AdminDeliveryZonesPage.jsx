@@ -108,12 +108,14 @@ function ZoneRow({ zone, onSave }) {
   }
 
   return (
-    <div className='flex items-center justify-between p-4'>
-      <div>
+    // flex-wrap: the checkbox label plus the fee field come to about 211px
+    // on their own, and with the zone name the row no longer fits a phone.
+    <div className='flex flex-wrap items-center justify-between gap-3 p-4'>
+      <div className='min-w-0'>
         <p className='font-medium text-brand-dark text-sm'>{zone.name}</p>
         <p className='text-xs text-neutral-500'>{zone.etaDays} days</p>
       </div>
-      <div className='flex items-center gap-4'>
+      <div className='flex flex-wrap items-center gap-4'>
         <label className='flex items-center gap-1.5 text-xs text-neutral-600'>
           <input
             type='checkbox'

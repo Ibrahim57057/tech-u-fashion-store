@@ -34,8 +34,10 @@ export default function AdminProductsPage() {
 
   return (
     <div>
-      <div className='flex items-center justify-between mb-6 gap-4'>
-        <h1 className='font-display font-bold text-2xl text-brand-dark'>
+      {/* Wraps rather than overflowing: the title, a 256px search box and
+          the button need ~400px, and a phone gives 272px. */}
+      <div className='flex flex-wrap items-center gap-3 mb-6'>
+        <h1 className='font-display font-bold text-2xl text-brand-dark mr-auto'>
           Products
         </h1>
         <input
@@ -46,7 +48,7 @@ export default function AdminProductsPage() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          className='border border-neutral-300 rounded-card px-3 py-1.5 text-sm w-64'
+          className='border border-neutral-300 rounded-card px-3 py-1.5 text-sm w-full sm:w-64'
         />
         <Link to='/admin/products/new'>
           <Button size='sm'>

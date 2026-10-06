@@ -60,7 +60,7 @@ export default function ProductDetailPage() {
   }
 
   return (
-    <div className='px-6 py-8 max-w-6xl mx-auto'>
+    <div className='px-4 sm:px-6 py-8 max-w-6xl mx-auto'>
       <Breadcrumbs
         items={[
           { label: "Home", to: "/" },
@@ -69,7 +69,7 @@ export default function ProductDetailPage() {
         ]}
       />
 
-      <div className='grid md:grid-cols-2 gap-10'>
+      <div className='grid md:grid-cols-2 gap-6 md:gap-10'>
         <ProductGallery
           images={
             selectedVariant?.images?.length > 0
@@ -79,10 +79,12 @@ export default function ProductDetailPage() {
           alt={product.name}
         />
 
-        <div>
-          <div className='flex items-start justify-between'>
-            <div>
-              <p className='text-sm text-neutral-500'>{product.brand}</p>
+        <div className='min-w-0'>
+          <div className='flex items-start justify-between gap-3'>
+            <div className='min-w-0'>
+              <p className='text-sm text-neutral-500 truncate'>
+                {product.brand}
+              </p>
               <h1 className='font-display font-bold text-2xl text-brand-dark'>
                 {product.name}
               </h1>
@@ -101,7 +103,7 @@ export default function ProductDetailPage() {
               aria-label={
                 wishlisted ? "Remove from wishlist" : "Add to wishlist"
               }
-              className='p-2 hover:bg-neutral-100 rounded-full'>
+              className='p-2 hover:bg-neutral-100 rounded-full shrink-0'>
               <Heart
                 className={`w-6 h-6 ${wishlisted ? "fill-brand-accent text-brand-accent" : "text-brand-dark"}`}
               />
@@ -166,16 +168,19 @@ export default function ProductDetailPage() {
             </Button>
           </div>
 
-          <div className='mt-4 flex items-center gap-2 text-sm text-neutral-600'>
-            <Truck className='w-4 h-4' />
-            Delivery in 2–4 days · Free above ₦50,000
+          {/* flex-wrap: as a single flex row the text becomes an anonymous
+              flex item with nowhere to wrap, so it broke into two ragged
+              lines that started under the icon. */}
+          <div className='mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral-600'>
+            <Truck className='w-4 h-4 shrink-0' />
+            <span>Delivery in 2–4 days · Free above ₦50,000</span>
           </div>
 
           <div className='mt-8 border border-neutral-200 rounded-card p-4'>
             <h2 className='font-display font-semibold text-brand-dark'>
               Rate this product
             </h2>
-            <div className='mt-2 flex items-center gap-3'>
+            <div className='mt-2 flex flex-wrap items-center gap-x-3 gap-y-1'>
               <RatingInput value={myRating} onChange={setMyRating} />
               <span className='text-sm text-neutral-500'>
                 {myRating > 0

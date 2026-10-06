@@ -28,10 +28,24 @@ export default function RegisterForm() {
     email: "",
     phone: "",
     password: "",
+    confirmPassword: "",
   });
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  function update(field, value) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    // Clear the message for the field being edited. Leaving it up means the
+    // customer fixes the mistake and the error is still standing there
+    // claiming otherwise until they submit again.
+    setErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
 
   function validate() {
     const next = {};
@@ -42,6 +56,9 @@ export default function RegisterForm() {
     if (!form.phone) next.phone = "Phone number is required";
     if (!form.password || form.password.length < 8)
       next.password = "Password must be at least 8 characters";
+    if (!form.confirmPassword) next.confirmPassword = "Confirm your password";
+    else if (form.confirmPassword !== form.password)
+      next.confirmPassword = "Passwords do not match";
     return next;
   }
 
@@ -58,7 +75,14 @@ export default function RegisterForm() {
 
     setSubmitting(true);
     try {
-      await register(form);
+      // confirmPassword is a browser-side check only, so it is not sent —
+      // the register schema has no such field.
+      await register({
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        password: form.password,
+      });
       navigate(safeDestination(from), { replace: true });
     } catch (err) {
       // Per-field messages (including "that email is already taken" and the
@@ -84,28 +108,40 @@ export default function RegisterForm() {
       <Input
         label='Full name'
         value={form.name}
-        onChange={(e) => setForm({ ...form, name: e.target.value })}
+        onChange={(e) => update("name", e.target.value)}
+        autoComplete='name'
         error={errors.name}
       />
       <Input
         label='Email'
         type='email'
         value={form.email}
-        onChange={(e) => setForm({ ...form, email: e.target.value })}
+        onChange={(e) => update("email", e.target.value)}
+        autoComplete='email'
         error={errors.email}
       />
       <Input
         label='Phone number'
         value={form.phone}
-        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+        onChange={(e) => update("phone", e.target.value)}
+        autoComplete='tel'
         error={errors.phone}
       />
       <Input
         label='Password'
         type='password'
         value={form.password}
-        onChange={(e) => setForm({ ...form, password: e.target.value })}
+        onChange={(e) => update("password", e.target.value)}
+        autoComplete='new-password'
         error={errors.password}
+      />
+      <Input
+        label='Confirm password'
+        type='password'
+        value={form.confirmPassword}
+        onChange={(e) => update("confirmPassword", e.target.value)}
+        autoComplete='new-password'
+        error={errors.confirmPassword}
       />
 
       {serverError && (

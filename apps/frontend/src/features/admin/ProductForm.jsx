@@ -88,7 +88,7 @@ export default function ProductForm({ existingProduct }) {
 
   return (
     <form onSubmit={handleSubmit} className='space-y-6 max-w-2xl'>
-      <div className='grid grid-cols-2 gap-4'>
+      <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
         <Input
           label='Name'
           value={form.name}
@@ -116,7 +116,7 @@ export default function ProductForm({ existingProduct }) {
         />
       </div>
 
-      <div className='grid grid-cols-2 gap-4'>
+      <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
         <Input
           label='Price (₦)'
           type='number'

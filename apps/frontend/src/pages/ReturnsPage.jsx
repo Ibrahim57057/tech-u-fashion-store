@@ -67,7 +67,7 @@ export default function ReturnsPage() {
   }
 
   return (
-    <div className='px-6 py-12 max-w-3xl mx-auto'>
+    <div className='px-4 sm:px-6 py-12 max-w-3xl mx-auto'>
       <Breadcrumbs
         items={[
           { label: "Home", to: "/" },
@@ -207,15 +207,17 @@ export default function ReturnsPage() {
               {returns.map((r) => (
                 <div
                   key={r._id}
-                  className='border border-neutral-200 rounded-card p-4 flex items-center justify-between'>
-                  <div>
+                  className='border border-neutral-200 rounded-card p-4 flex flex-wrap items-center justify-between gap-2'>
+                  <div className='min-w-0 flex-1'>
                     <p className='text-sm font-medium text-brand-dark'>
                       {r.order?.orderNumber ?? 'Order'}
                     </p>
-                    <p className='text-xs text-neutral-500'>{r.reason}</p>
+                    <p className='text-xs text-neutral-500 break-words'>
+                      {r.reason}
+                    </p>
                   </div>
                   <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap shrink-0 ${
                       RETURN_STATUS_STYLES[r.status] ?? "bg-neutral-100 text-neutral-600"
                     }`}>
                     {r.status}

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('./email.js', import.meta.url), 'utf8');
+const escapeSource = readFileSync(new URL('../../utils/html.js', import.meta.url), 'utf8');
 
 describe('order confirmation email escaping', () => {
     // Every interpolation in the HTML body is customer-supplied with no
@@ -24,11 +25,16 @@ describe('order confirmation email escaping', () => {
     });
 
     it('escapes the five HTML-significant characters', () => {
-        expect(source).toContain('&amp;');
-        expect(source).toContain('&lt;');
-        expect(source).toContain('&gt;');
-        expect(source).toContain('&quot;');
-        expect(source).toContain('&#39;');
+        // escapeHtml now lives in utils/html.js so the password-reset email
+        // cannot drift to a half-copy of it. The body is still scanned above
+        // for interpolations that skip it, and this pins the import so an
+        // inlined replacement would fail too.
+        expect(source).toContain("from '../../utils/html.js'");
+        expect(escapeSource).toContain('&amp;');
+        expect(escapeSource).toContain('&lt;');
+        expect(escapeSource).toContain('&gt;');
+        expect(escapeSource).toContain('&quot;');
+        expect(escapeSource).toContain('&#39;');
     });
 
     it('leaves the plain-text subject alone', () => {

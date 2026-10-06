@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import User from './user.model.js';
 import { catchAsync } from '../../middleware/catchAsync.js';
 import { AppError } from '../../middleware/errorHandler.js';
@@ -10,6 +11,18 @@ import {
     isDuplicateKeyError,
     DUPLICATE_EMAIL_MESSAGE,
 } from '../../utils/emailValidation.js';
+import { sendPasswordResetEmail } from './passwordReset.email.js';
+
+/** How long a reset link stays usable. Short on purpose: the message has to
+ *  arrive, the customer clicks it, and nothing else. Fifteen minutes is the
+ *  usual balance between "email is slow" and "a lost link is not a hostage". */
+const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
+
+/** SHA-256 of the raw token. Never store the raw one — a database dump must
+ *  not be enough to take over an account. */
+function hashToken(rawToken) {
+    return crypto.createHash('sha256').update(rawToken).digest('hex');
+}
 
 // Sends the token as an httpOnly cookie — JavaScript in the browser
 // can't read it (protecting against XSS stealing it), but the browser
@@ -96,6 +109,90 @@ export const login = catchAsync(async (req, res, next) => {
 
     const token = signToken(user._id);
     sendTokenCookie(res, token);
+
+    res.json({ success: true, data: publicUser(user) });
+});
+
+/**
+ * POST /auth/forgot-password — emails a reset link.
+ *
+ * The reply is byte-for-byte the same whether or not an account exists for
+ * the address. Anything else turns this endpoint into a free oracle for
+ * checking which emails are registered at the store, which is the first step
+ * of most credential-stuffing runs.
+ *
+ * The rate limiter on the route is the other half of that: without it, a
+ * flood here becomes a flood of mail from the Resend account, which is a fast
+ * way to get the sending domain suspended.
+ */
+export const forgotPassword = catchAsync(async (req, res) => {
+    const email = normalizeEmail(req.body.email);
+    const canonical = toCanonicalEmail(email);
+
+    // Matched on either form so accounts created before canonicalEmail
+    // existed are still reachable — losing the link for them would be a silent
+    // dead end that looks like "forgot password is broken".
+    const user = await User.findOne({ $or: [{ email }, { canonicalEmail: canonical }] });
+
+    if (user) {
+        // 32 bytes = 256 bits of entropy; there is no guessing the raw token.
+        const rawToken = crypto.randomBytes(32).toString('hex');
+        user.passwordResetToken = hashToken(rawToken);
+        user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+
+        // validateBeforeSave: false skips the canonicalEmail validator, which
+        // does a DNS lookup on every save. Nothing here needs revalidating,
+        // and the save must not fail on something the account already passed.
+        await user.save({ validateBeforeSave: false });
+
+        await sendPasswordResetEmail({ to: user.email, name: user.name, rawToken });
+    }
+
+    res.json({
+        success: true,
+        data: {
+            message:
+                'If an account exists for that email, a password reset link is on its way. It expires in 15 minutes.',
+        },
+    });
+});
+
+/**
+ * POST /auth/reset-password — consumes the emailed token and sets a new one.
+ *
+ * On success this issues a fresh session cookie too, so the customer lands
+ * signed in rather than having to log in again — and, because `protect`
+ * rejects anything issued before passwordChangedAt, every other session that
+ * was open anywhere else dies on this save.
+ */
+export const resetPassword = catchAsync(async (req, res, next) => {
+    const { token, password } = req.body;
+
+    const user = await User.findOne({
+        passwordResetToken: hashToken(token),
+        passwordResetExpires: { $gt: new Date() },
+    });
+
+    if (!user) {
+        return next(
+            new AppError(
+                'This reset link is invalid or has expired. Please request a new one.',
+                400,
+            ),
+        );
+    }
+
+    user.password = password; // hashed by the pre('save') hook
+    // Single-use: without this the link in a mailbox stays a credential for
+    // the full window, and a forwarded or later-exposed message would still
+    // work.
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+
+    await user.save({ validateBeforeSave: false });
+
+    const jwt = signToken(user._id);
+    sendTokenCookie(res, jwt);
 
     res.json({ success: true, data: publicUser(user) });
 });

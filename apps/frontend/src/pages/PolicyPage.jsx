@@ -15,7 +15,7 @@ export default function PolicyPage({ title, intro, sections = [], seo }) {
   });
 
   return (
-    <div className='px-6 py-12 max-w-3xl mx-auto'>
+    <div className='px-4 sm:px-6 py-12 max-w-3xl mx-auto'>
       <Breadcrumbs
         items={[
           { label: "Home", to: "/" },

@@ -67,11 +67,11 @@ export default function ProductListingPage() {
     : [{ label: "Home", to: "/" }, { label: "All products" }];
 
   return (
-    <div className='px-6 py-8 max-w-7xl mx-auto'>
+    <div className='px-4 sm:px-6 py-8 max-w-7xl mx-auto'>
       <Breadcrumbs items={breadcrumbItems} />
 
-      <div className='flex items-center justify-between mb-6'>
-        <h1 className='font-display font-bold text-2xl text-brand-dark'>
+      <div className='flex flex-wrap items-center gap-3 mb-6'>
+        <h1 className='font-display font-bold text-2xl text-brand-dark mr-auto'>
           {pageTitle}
         </h1>
         <Button
@@ -94,7 +94,7 @@ export default function ProductListingPage() {
         </aside>
 
         <div>
-          <div className='flex items-center justify-between mb-4'>
+          <div className='flex flex-wrap items-center justify-between gap-3 mb-4'>
             <p className='text-sm text-neutral-500'>
               {isLoading ? "Loading…" : `${resultCount} items`}
             </p>
@@ -102,7 +102,7 @@ export default function ProductListingPage() {
               options={sortOptions}
               value={sort}
               onChange={(e) => setSort(e.target.value)}
-              className='w-48'
+              className='w-full sm:w-48'
             />
           </div>
 

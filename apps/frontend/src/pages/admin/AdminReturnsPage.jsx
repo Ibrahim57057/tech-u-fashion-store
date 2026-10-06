@@ -82,13 +82,16 @@ function ReturnRow({ returnRequest }) {
       </p>
 
       {isPending_ && (
-        <div className='flex items-center gap-2'>
+        // The note takes its own line below sm: the input's intrinsic width
+        // plus both buttons is ~340px and the card gives 240px, so the
+        // Approve button sat outside the card.
+        <div className='flex flex-wrap items-center gap-2'>
           <input
             type='text'
             placeholder='Note (optional)'
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            className='flex-1 border border-neutral-300 rounded-card px-3 py-1.5 text-sm'
+            className='w-full min-w-0 border border-neutral-300 rounded-card px-3 py-1.5 text-sm sm:w-auto sm:flex-1'
           />
           <Button
             size='sm'

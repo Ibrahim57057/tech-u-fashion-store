@@ -32,7 +32,12 @@ export default function VariantEditor({ variants, onChange }) {
           <div
             key={index}
             className='border border-neutral-200 rounded-card p-2'>
-            <div className='grid grid-cols-[1fr_1fr_1fr_80px_32px_32px] gap-2 items-end'>
+            {/* The desktop track list is 1fr_1fr_1fr_80px_32px_32px, which
+                needs ~600px once the inputs hit their intrinsic width — far
+                more than the 272px an admin form gets on a phone, so the row
+                ran off the panel. Two columns below sm; the buttons drop to
+                their own row rather than shrinking to unusable squares. */}
+            <div className='grid grid-cols-2 gap-2 items-end sm:grid-cols-[1fr_1fr_1fr_80px_32px_32px]'>
               <Input
                 label={index === 0 ? "Size" : undefined}
                 value={variant.size}
@@ -62,7 +67,7 @@ export default function VariantEditor({ variants, onChange }) {
                 onClick={() =>
                   setExpandedIndex(expandedIndex === index ? null : index)
                 }
-                className={`p-2 rounded hover:bg-neutral-100 ${
+                className={`p-2 rounded hover:bg-neutral-100 justify-self-start sm:justify-self-center ${
                   variant.images?.length > 0
                     ? "text-brand-accent"
                     : "text-neutral-400"
@@ -75,7 +80,7 @@ export default function VariantEditor({ variants, onChange }) {
                 type='button'
                 onClick={() => removeVariant(index)}
                 disabled={variants.length === 1}
-                className='p-2 text-neutral-400 hover:text-danger disabled:opacity-30 disabled:cursor-not-allowed'
+                className='p-2 text-neutral-400 hover:text-danger justify-self-start sm:justify-self-center disabled:opacity-30 disabled:cursor-not-allowed'
                 aria-label='Remove variant'>
                 <Trash2 className='w-4 h-4' />
               </button>

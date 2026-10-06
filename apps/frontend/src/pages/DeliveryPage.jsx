@@ -21,7 +21,7 @@ export default function DeliveryPage() {
   const activeZones = (zones ?? []).filter((z) => z.isActive);
 
   return (
-    <div className='px-6 py-12 max-w-3xl mx-auto'>
+    <div className='px-4 sm:px-6 py-12 max-w-3xl mx-auto'>
       <Breadcrumbs
         items={[
           { label: "Home", to: "/" },
@@ -49,8 +49,12 @@ export default function DeliveryPage() {
             Delivery zones are being updated. Please check back shortly.
           </p>
         ) : (
-          <div className='border border-neutral-200 rounded-card overflow-hidden'>
-            <table className='w-full text-sm'>
+          <div className='border border-neutral-200 rounded-card overflow-x-auto'>
+            {/* overflow-x-auto, not overflow-hidden: four columns with px-4
+                cells need about 330px and a phone gives this table 272px. The
+                old overflow-hidden clipped the last two columns with no way to
+                reach them, so "Pay on delivery" was simply invisible. */}
+            <table className='w-full text-sm min-w-[480px]'>
               <thead className='bg-neutral-50 text-left'>
                 <tr>
                   <th className='px-4 py-3 font-semibold text-brand-dark'>

@@ -1,37 +1,6 @@
-import { Resend } from 'resend';
-import { env } from '../../config/env.js';
+import { escapeHtml } from '../../utils/html.js';
+import { resend, FROM_ADDRESS } from '../../utils/mailer.js';
 import { formatNaira } from './formatNaira.js';
-
-const resend = env.resendApiKey ? new Resend(env.resendApiKey) : null;
-
-/**
- * Escapes a value for interpolation into the HTML body.
- *
- * Every field below is customer-supplied and lands inside an HTML email:
- * a product name an admin typed, but more importantly the shipping address and
- * full name, which come straight off the checkout form with no character
- * restrictions. Unescaped, a name like `<img src=x onerror=...>` is live markup
- * in the customer's mail client. This is not XSS against our own origin —
- * it is markup injection into a third-party renderer, which is exactly the
- * situation people report phishing through.
- *
- * The five characters below are the ones that can break out of HTML text or
- * an attribute value; nothing else is meaningful here because every
- * interpolation is in element content, never in an attribute or a URL.
- */
-function escapeHtml(value) {
-    return String(value ?? '').replace(
-        /[&<>"']/g,
-        (char) =>
-            ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#39;',
-            })[char],
-    );
-}
 
 /**
  * Sends an order confirmation. If Resend isn't configured (no key in
@@ -53,7 +22,7 @@ export async function sendOrderConfirmationEmail(order) {
 
     try {
         await resend.emails.send({
-            from: 'TECH-U Fashion Store <onboarding@resend.dev>',
+            from: FROM_ADDRESS,
             to: order.contact.email,
             subject: `Order confirmed — ${order.orderNumber}`,
             html: `

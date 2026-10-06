@@ -89,7 +89,10 @@ export default function AdminOrdersPage() {
 
   return (
     <div>
-      <div className='flex items-center justify-between mb-6 gap-3'>
+      {/* flex-wrap, not a single row: title + search + filter + button is
+          ~540px of minimum width and a phone gives this 272px. Without
+          wrapping the controls pushed past the admin panel's edge. */}
+      <div className='flex flex-wrap items-center gap-3 mb-6'>
         <h1 className='font-display font-bold text-2xl text-brand-dark'>
           Orders
         </h1>
@@ -101,7 +104,7 @@ export default function AdminOrdersPage() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          className='border border-neutral-300 rounded-card px-3 py-1.5 text-sm w-56'
+          className='border border-neutral-300 rounded-card px-3 py-1.5 text-sm w-full sm:w-56'
         />
         <Select
           options={filterOptions}
@@ -110,7 +113,7 @@ export default function AdminOrdersPage() {
             setStatusFilter(e.target.value);
             setPage(1); // a new filter should always start back at page 1
           }}
-          className='w-56'
+          className='w-full sm:w-56'
         />
         <Button size='sm' variant='outline' onClick={exportCsv}>
           <Download className='w-4 h-4 mr-2' />

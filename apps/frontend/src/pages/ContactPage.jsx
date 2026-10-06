@@ -67,7 +67,7 @@ export default function ContactPage() {
 
   if (status === "sent") {
     return (
-      <div className='px-6 py-16 max-w-3xl mx-auto grid md:grid-cols-2 gap-10'>
+      <div className='px-4 sm:px-6 py-16 max-w-3xl mx-auto grid md:grid-cols-2 gap-10'>
         <div className='md:col-span-2'>
           <div className='border border-neutral-200 rounded-card p-8 text-center'>
             <CheckCircle2 className='w-12 h-12 text-success mx-auto mb-4' />
@@ -88,7 +88,7 @@ export default function ContactPage() {
   }
 
   return (
-    <div className='px-6 py-16 max-w-3xl mx-auto grid md:grid-cols-2 gap-10'>
+    <div className='px-4 sm:px-6 py-16 max-w-3xl mx-auto grid md:grid-cols-2 gap-10'>
       <div>
         <h1 className='font-display font-bold text-2xl text-brand-dark mb-4'>
           Get in touch

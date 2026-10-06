@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { motion } from "motion/react";
 import { useReducedMotion } from "../../hooks/useReducedMotion.js";
 
@@ -14,9 +15,18 @@ const wordVariants = {
  * forever. The word matching `accent` carries a second, blurred copy of
  * itself behind it whose opacity pulses on a loop — a real glow that
  * costs one composited layer, where animating a drop-shadow filter
- * would repaint every frame. Spacing is em-based rather than literal
- * spaces, because a space inside a masked span gets trimmed at the end
- * of a line box. Collapses to plain text under "reduce motion".
+ * would repaint every frame. Collapses to plain text under "reduce
+ * motion".
+ *
+ * The words are separated by a real space rather than a margin, and the
+ * container stays in normal inline flow. Both matter for wrapping: the
+ * spaced-out inline-blocks have no soft wrap opportunity between them,
+ * so the browser treats the whole headline as one unbreakable run. On a
+ * 320px screen "Step into TECH-U" at text-3xl is wider than the viewport,
+ * and without a break opportunity it overflows the page instead of
+ * breaking to a second line. A space outside the mask still counts as
+ * whitespace — the trimming that the mask's overflow relies on only
+ * applies inside it.
  */
 export default function SplitText({
   text,
@@ -57,34 +67,34 @@ export default function SplitText({
           const isAccent = word === accent;
 
           return (
-            <span
-              key={`${word}-${i}`}
-              aria-hidden='true'
-              className={`relative inline-block ${
-                i < words.length - 1 ? "mr-[0.28em]" : ""
-              }`}>
-              {isAccent && (
-                <motion.span
-                  className='absolute inset-0 text-brand-accent blur-lg'
-                  animate={{ opacity: [0.3, 0.85, 0.3], scale: [1, 1.1, 1] }}
-                  transition={{
-                    duration: 2.6,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}>
-                  {word}
-                </motion.span>
-              )}
+            <Fragment key={`${word}-${i}`}>
+              <span
+                aria-hidden='true'
+                className='relative inline-block align-bottom'>
+                {isAccent && (
+                  <motion.span
+                    className='absolute inset-0 text-brand-accent blur-lg'
+                    animate={{ opacity: [0.3, 0.85, 0.3], scale: [1, 1.1, 1] }}
+                    transition={{
+                      duration: 2.6,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}>
+                    {word}
+                  </motion.span>
+                )}
 
-              <span className='inline-block overflow-hidden align-bottom pb-1 -mb-1'>
-                <motion.span
-                  className={`inline-block ${isAccent ? "text-brand-accent" : ""}`}
-                  variants={wordVariants}
-                  transition={{ duration: 0.8, ease: easeOutExpo }}>
-                  {word}
-                </motion.span>
+                <span className='inline-block overflow-hidden align-bottom pb-1 -mb-1'>
+                  <motion.span
+                    className={`inline-block ${isAccent ? "text-brand-accent" : ""}`}
+                    variants={wordVariants}
+                    transition={{ duration: 0.8, ease: easeOutExpo }}>
+                    {word}
+                  </motion.span>
+                </span>
               </span>
-            </span>
+              {i < words.length - 1 ? " " : null}
+            </Fragment>
           );
         })}
       </motion.span>

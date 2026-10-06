@@ -66,6 +66,11 @@ export default function LoginForm() {
         onChange={(e) => setForm({ ...form, password: e.target.value })}
         error={errors.password}
       />
+      <div className='text-right'>
+        <Link to='/forgot-password' className='text-sm text-brand-accent2 hover:underline'>
+          Forgot password?
+        </Link>
+      </div>
 
       {serverError && <p className="text-sm text-danger text-center">{serverError}</p>}
 

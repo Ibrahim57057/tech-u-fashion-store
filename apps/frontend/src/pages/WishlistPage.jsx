@@ -13,7 +13,7 @@ export default function WishlistPage() {
   const wishlistedProducts = products?.filter((p) => productIds.includes(p.id));
 
   return (
-    <div className='px-6 py-10 max-w-7xl mx-auto'>
+    <div className='px-4 sm:px-6 py-10 max-w-7xl mx-auto'>
       <h1 className='font-display font-bold text-2xl text-brand-dark mb-6'>
         Your wishlist
       </h1>

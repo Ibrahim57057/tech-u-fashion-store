@@ -78,8 +78,8 @@ export default function AdminSubscribersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className='font-display font-bold text-2xl text-brand-dark'>
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <h1 className='font-display font-bold text-2xl text-brand-dark mr-auto'>
           Newsletter subscribers
         </h1>
         {total > 0 && (

@@ -4,7 +4,7 @@ import FadeIn from "../../components/ui/FadeIn.jsx";
 
 export default function CategoryTiles() {
   return (
-    <section className='px-6 py-10 max-w-7xl mx-auto'>
+    <section className='px-4 sm:px-6 py-10 max-w-7xl mx-auto'>
       <h2 className='font-display font-bold text-xl text-brand-dark mb-4'>
         Shop by category
       </h2>

@@ -38,7 +38,7 @@ const socials = [
 export default function Footer() {
   return (
     <footer className='bg-brand-dark text-neutral-300 mt-16'>
-      <div className='max-w-7xl mx-auto px-6 py-12 grid grid-cols-2 md:grid-cols-4 gap-8'>
+      <div className='max-w-7xl mx-auto px-4 sm:px-6 py-12 grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8'>
         <div className='col-span-2 md:col-span-1'>
           <AnimatedLogo
             src={logo}

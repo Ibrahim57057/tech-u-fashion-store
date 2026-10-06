@@ -30,6 +30,23 @@ export const protect = catchAsync(async (req, res, next) => {
         return next(new AppError('This account has been suspended. Please contact support.', 403));
     }
 
+    // A password change (or a password reset, which is the case that
+    // matters) ends every session that predates it. The cookie is a stateless
+    // JWT, so it stays cryptographically valid for its full 30 days unless
+    // something compares its issue time against when the password changed —
+    // otherwise someone using a stolen cookie would keep access after the
+    // real owner recovered the account.
+    //
+    // `iat` is whole seconds, so passwordChangedAt was set a second in the
+    // past; `>=` would be wrong for a token issued in that same second.
+    if (
+        user.passwordChangedAt &&
+        decoded.iat &&
+        decoded.iat * 1000 < user.passwordChangedAt.getTime()
+    ) {
+        return next(new AppError('Your password was changed. Please log in again.', 401));
+    }
+
     req.user = user;
     next();
 });
@@ -46,7 +63,14 @@ export const optionalAuth = catchAsync(async (req, res, next) => {
     try {
         const decoded = verifyToken(token);
         const user = await User.findById(decoded.id);
-        if (user) req.user = user;
+        // Same password-change check as `protect`, but it drops the request
+        // to guest instead of failing: optionalAuth exists precisely so a
+        // stale or otherwise unusable cookie never blocks a guest.
+        const stale =
+            user?.passwordChangedAt &&
+            decoded.iat &&
+            decoded.iat * 1000 < user.passwordChangedAt.getTime();
+        if (user && !stale) req.user = user;
     } catch {
         // Bad or expired token: treat as a guest instead of failing.
     }
