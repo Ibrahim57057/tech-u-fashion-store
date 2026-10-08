@@ -7,6 +7,8 @@ import {
   Users,
 } from "lucide-react";
 import { useAdminStats, useRevenueByDay } from "../../hooks/useAdminStats.js";
+import { useAuth } from "../../hooks/useAuth.js";
+import { isAdmin } from "../../features/admin/permissions.js";
 import StatCard from "../../features/admin/StatCard.jsx";
 import Skeleton from "../../components/ui/Skeleton.jsx";
 import { formatNaira } from "../../lib/formatNaira.js";
@@ -21,6 +23,12 @@ const RevenueChart = lazy(() => import("./RevenueChart.jsx"));
 const RevenueCard = lazy(() => import("../../features/admin/RevenueCard.jsx"));
 
 export default function AdminDashboardPage() {
+  const { user } = useAuth();
+  // Revenue belongs to admins only: the stats payload omits totalRevenue for
+  // staff, and /admin/top-products plus /admin/revenue-by-day refuse them
+  // outright, so those three blocks are not rendered at all rather than
+  // rendered empty.
+  const fullAdmin = isAdmin(user);
   const { stats, topProducts, isLoading } = useAdminStats();
   const { data: revenueByDay } = useRevenueByDay();
 
@@ -48,14 +56,16 @@ export default function AdminDashboardPage() {
         Dashboard
       </h1>
 
-      <div className='mb-6'>
-        <Suspense fallback={<Skeleton className='h-36 w-full' />}>
-          <RevenueCard
-            totalRevenue={stats.totalRevenue}
-            revenueByDay={revenueByDay}
-          />
-        </Suspense>
-      </div>
+      {fullAdmin && (
+        <div className='mb-6'>
+          <Suspense fallback={<Skeleton className='h-36 w-full' />}>
+            <RevenueCard
+              totalRevenue={stats.totalRevenue}
+              revenueByDay={revenueByDay}
+            />
+          </Suspense>
+        </div>
+      )}
 
       <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-10'>
         <StatCard
@@ -81,39 +91,43 @@ export default function AdminDashboardPage() {
         <StatCard label='Customers' value={stats.totalCustomers} icon={Users} />
       </div>
 
-      <h2 className='font-display font-semibold text-lg text-brand-dark mb-4'>
-        Top products
-      </h2>
-      <div className='bg-white rounded-card border border-neutral-200 divide-y divide-neutral-100'>
-        {topProducts.length === 0 && (
-          <p className='p-4 text-sm text-neutral-500'>No sales yet.</p>
-        )}
-        {topProducts.map((product) => (
-          <div
-            key={product._id}
-            className='flex items-center justify-between p-4'>
-            <p className='text-sm text-brand-dark'>{product.name}</p>
-            <div className='text-right'>
-              <p className='text-sm font-semibold text-brand-dark'>
-                {product.unitsSold} sold
-              </p>
-              <p className='text-xs text-neutral-500'>
-                {formatNaira(product.revenue)}
-              </p>
-            </div>
+      {fullAdmin && (
+        <>
+          <h2 className='font-display font-semibold text-lg text-brand-dark mb-4'>
+            Top products
+          </h2>
+          <div className='bg-white rounded-card border border-neutral-200 divide-y divide-neutral-100'>
+            {topProducts.length === 0 && (
+              <p className='p-4 text-sm text-neutral-500'>No sales yet.</p>
+            )}
+            {topProducts.map((product) => (
+              <div
+                key={product._id}
+                className='flex items-center justify-between p-4'>
+                <p className='text-sm text-brand-dark'>{product.name}</p>
+                <div className='text-right'>
+                  <p className='text-sm font-semibold text-brand-dark'>
+                    {product.unitsSold} sold
+                  </p>
+                  <p className='text-xs text-neutral-500'>
+                    {formatNaira(product.revenue)}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      <h2 className='font-display font-semibold text-lg text-brand-dark mb-4 mt-10'>
-        Revenue, last 14 days
-      </h2>
-      <div className='bg-white rounded-card border border-neutral-200 p-4 h-64'>
-        <Suspense
-          fallback={<p className='text-sm text-neutral-500'>Loading chart…</p>}>
-          <RevenueChart revenueByDay={revenueByDay} />
-        </Suspense>
-      </div>
+          <h2 className='font-display font-semibold text-lg text-brand-dark mb-4 mt-10'>
+            Revenue, last 14 days
+          </h2>
+          <div className='bg-white rounded-card border border-neutral-200 p-4 h-64'>
+            <Suspense
+              fallback={<p className='text-sm text-neutral-500'>Loading chart…</p>}>
+              <RevenueChart revenueByDay={revenueByDay} />
+            </Suspense>
+          </div>
+        </>
+      )}
     </div>
   );
 }

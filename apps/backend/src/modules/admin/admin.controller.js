@@ -27,10 +27,13 @@ export const getStats = catchAsync(async (req, res) => {
         data: {
             totalOrders,
             ordersToday,
-            totalRevenue: totalRevenueAgg[0]?.total || 0,
             pendingOrders: pendingCount,
             lowStockProducts: lowStockCount,
             totalCustomers: customerCount,
+            // Revenue is admin-only, so it is dropped from the payload rather
+            // than sent and hidden in the UI — a staff session must not be
+            // able to read it off the network tab either.
+            ...(req.user.role === 'admin' ? { totalRevenue: totalRevenueAgg[0]?.total || 0 } : {}),
         },
     });
 });
