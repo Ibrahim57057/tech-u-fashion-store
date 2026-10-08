@@ -95,11 +95,26 @@ export const getAllProducts = catchAsync(async (req, res) => {
     // into ApiFeatures — so an unsanitised query put `?$where=...` into
     // Product.find(). See middleware/sanitize.js for why req.query itself
     // cannot be cleaned.
-    const { search, category, size, color, brand, ...restQuery } = req.safeQuery;
+    // `isActive` is destructured OUT of restQuery on purpose. It used to be
+    // forwarded to ApiFeatures, which calls find() a second time and
+    // overwrites the isActive: true below — so ?isActive=false on this public
+    // endpoint returned every deactivated product. It is read here instead.
+    const { search, category, size, color, brand, isActive, ...restQuery } = req.safeQuery;
+
+    // Admins manage hidden products from the same table, so they get the
+    // whole flag range: no parameter means both sides, and they may narrow to
+    // either. Everyone else is pinned to the active catalogue. req.user comes
+    // from optionalAuth on this route.
+    const isAdmin = req.user?.role === 'admin';
+    let activeFlag = true;
+    if (isAdmin) {
+        if (isActive === undefined) activeFlag = undefined; // both active and hidden
+        else if (String(isActive) === 'false') activeFlag = false;
+    }
 
     // Everything except the choice of size/colour/brand, so the sidebar
     // options stay complete even while a filter is active.
-    const baseFilter = { isActive: true };
+    const baseFilter = activeFlag === undefined ? {} : { isActive: activeFlag };
     if (search) {
         baseFilter.name = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
     }

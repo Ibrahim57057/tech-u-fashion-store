@@ -31,7 +31,10 @@ export class ApiFeatures {
         // That made it the whole NoSQL-injection surface: any unrecognised
         // query parameter, including `?$where=...`, was spread straight into
         // Product.find(). Naming the fields that are actually safe closes it.
-        const allowed = new Set(['isActive', 'status', 'role', 'user', 'category', 'contact.email']);
+        // `isActive` is deliberately NOT in here: the catalogue builds it
+        // itself, and forwarding it let ?isActive=false overwrite the
+        // active-only filter and publish deactivated products.
+        const allowed = new Set(['status', 'role', 'user', 'category', 'contact.email']);
         const filters = {};
         for (const [key, value] of Object.entries(this.queryParams ?? {})) {
             if (allowed.has(key)) filters[key] = value;

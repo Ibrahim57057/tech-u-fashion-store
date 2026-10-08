@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Download } from "lucide-react";
 import { useAdminSubscribers } from "../../hooks/useAdminInbox.js";
 import { apiFetchWithMeta } from "../../lib/apiClient.js";
+import { toCsv } from "../../lib/csv.js";
 import Badge from "../../components/ui/Badge.jsx";
 import Button from "../../components/ui/Button.jsx";
 import Skeleton from "../../components/ui/Skeleton.jsx";
@@ -55,11 +56,9 @@ export default function AdminSubscribersPage() {
         s.unsubscribedAt ?? "",
       ]);
 
-      // Quote every field so a comma inside a name can't shift the columns.
-      const escape = (v) => `"${String(v).replace(/"/g, '""')}"`;
-      const csv = [header, ...rows]
-        .map((row) => row.map(escape).join(","))
-        .join("\r\n");
+      // Quoting, quote-escaping and the leading =/+/-/@ guard all live in
+      // one place so both admin exports encode cells the same way.
+      const csv = toCsv(header, rows);
 
       // The BOM makes Excel read it as UTF-8 rather than mangling accents.
       const blob = new Blob(["﻿" + csv], {

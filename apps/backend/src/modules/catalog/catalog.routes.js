@@ -8,7 +8,7 @@ import {
     deactivateProduct,
     bulkDeactivateProducts
 } from './catalog.controller.js';
-import { protect, restrictTo } from '../../middleware/auth.js';
+import { protect, restrictTo, optionalAuth } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import {
     createProductSchema,
@@ -20,7 +20,9 @@ import { uploadProductImage } from './upload.controller.js';
 
 const router = Router();
 
-router.get('/', getAllProducts);
+// optionalAuth, not protect: guests get the public catalogue, and an admin
+// session additionally allows ?isActive=false on the admin products table.
+router.get('/', optionalAuth, getAllProducts);
 router.get('/:slug', getProductBySlug);
 router.get('/by-id/:id', protect, restrictTo('admin'), getProductById);
 

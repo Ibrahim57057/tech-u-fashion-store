@@ -10,6 +10,7 @@ import Badge from "../../components/ui/Badge.jsx";
 import Pagination from "../../components/ui/Pagination.jsx";
 import Skeleton from "../../components/ui/Skeleton.jsx";
 import { formatNaira } from "../../lib/formatNaira.js";
+import { toCsv } from "../../lib/csv.js";
 
 // Every status an admin can move an order TO from its current one.
 // Mirrors ORDER_STATUS_TRANSITIONS on the backend — if the backend
@@ -74,11 +75,14 @@ export default function AdminOrdersPage() {
       "Total (NGN)",
       "Date",
     ];
-    const csv = [header, ...rows]
-      .map((r) => r.map((v) => `"${v}"`).join(","))
-      .join("\n");
+    // toCsv quotes every cell, escapes embedded quotes and neutralises a
+    // leading =/+/-/@ so a customer-controlled name cannot run a formula in
+    // the admin's spreadsheet.
+    const csv = toCsv(header, rows);
 
-    const blob = new Blob([csv], { type: "text/csv" });
+    const blob = new Blob(["﻿" + csv], {
+      type: "text/csv;charset=utf-8;",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

@@ -6,8 +6,9 @@ import Input from "../components/ui/Input.jsx";
 
 /**
  * Footer newsletter form. Talks to POST /api/v1/newsletter/subscribe.
- * The backend is idempotent, so submitting an address twice succeeds —
- * this just reflects whatever the server said back.
+ * The backend is idempotent AND deliberately non-enumerating — the reply is
+ * the same sentence whether or not the address was already on the list — so
+ * this just shows whatever message came back.
  */
 export default function NewsletterForm() {
   const [email, setEmail] = useState("");
@@ -27,12 +28,7 @@ export default function NewsletterForm() {
         body: { email },
       });
       setStatus("done");
-      setMessage(
-        res.message ||
-          (res.data?.alreadySubscribed
-            ? "You're already on the list."
-            : "Thanks — you're subscribed!"),
-      );
+      setMessage(res.message || "Thanks — you're subscribed!");
       setEmail("");
     } catch (err) {
       setStatus("error");

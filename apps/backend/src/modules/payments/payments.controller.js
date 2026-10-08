@@ -156,20 +156,31 @@ export const initializePayment = catchAsync(async (req, res, next) => {
  * the customer's cookie has expired while they were away.
  */
 export const verifyPayment = catchAsync(async (req, res, next) => {
-    const payment = await settleByReference(req.params.reference);
-
-    const order = await Order.findById(payment.order).select('orderNumber total status user');
+    // Ownership is decided BEFORE settling. settleByReference() writes both
+    // the payment row and the order status, so checking afterwards meant any
+    // signed-in customer could drive settlement for a reference they do not
+    // own — the 404 afterwards hid the response, not the side effect.
+    const payment = await Payment.findOne({ reference: req.params.reference }).select('order');
+    const ownedOrder = payment
+        ? await Order.findById(payment.order).select('orderNumber total status user')
+        : null;
 
     // Same generic 404 as everywhere else, so a valid-but-foreign reference is
     // indistinguishable from one that does not exist.
-    if (!order?.user || !order.user.equals(req.user._id)) {
+    if (!ownedOrder?.user || !ownedOrder.user.equals(req.user._id)) {
         return next(new AppError('Payment not found', 404));
     }
+
+    const settled = await settleByReference(req.params.reference);
+
+    // Re-read after settlement so orderStatus reflects the transition the
+    // call above may just have made.
+    const order = await Order.findById(ownedOrder._id).select('orderNumber total status');
 
     res.json({
         success: true,
         data: {
-            paymentStatus: payment.status,
+            paymentStatus: settled.status,
             orderStatus: order.status,
             orderNumber: order.orderNumber,
             total: order.total,

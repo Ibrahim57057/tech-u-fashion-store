@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import User from './user.model.js';
 import { catchAsync } from '../../middleware/catchAsync.js';
 import { AppError } from '../../middleware/errorHandler.js';
@@ -24,6 +25,12 @@ function hashToken(rawToken) {
     return crypto.createHash('sha256').update(rawToken).digest('hex');
 }
 
+/** A real bcrypt hash, at the same cost as a stored password (12), of a value
+ *  no login attempt can ever equal. login() compares against it when the
+ *  address has no account so both branches do identical work. It is not a
+ *  secret — it protects nothing and can live in the source. */
+const ABSENT_ACCOUNT_HASH = '$2b$12$BIWIrCeX0x9vxl0fP0Xj0ORzD3M/U63GHE3aVDDDOjhe/O1Ta3PVu';
+
 // Sends the token as an httpOnly cookie — JavaScript in the browser
 // can't read it (protecting against XSS stealing it), but the browser
 // automatically sends it back on every request to our API.
@@ -34,6 +41,23 @@ function sendTokenCookie(res, token) {
         secure: isProd, // SameSite: 'none' requires Secure, browsers reject it otherwise
         sameSite: isProd ? 'none' : 'lax',
         maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+}
+
+/**
+ * Deletes the cookie with the exact attributes it was set with.
+ *
+ * clearCookie('token') on its own sent no httpOnly/secure/sameSite flags, and
+ * a mismatch there can leave the 30-day session alive after logout — the
+ * visitor believes they signed out while the browser keeps sending the token.
+ */
+function clearTokenCookie(res) {
+    const isProd = env.nodeEnv === 'production';
+    res.clearCookie('token', {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
+        path: '/',
     });
 }
 
@@ -96,7 +120,15 @@ export const login = catchAsync(async (req, res, next) => {
     // for this one query, since we genuinely need it here to compare.
     const user = await User.findOne({ email }).select('+password');
 
-    if (!user || !(await user.comparePassword(password))) {
+    // The comparison always runs, even for an address with no account, so an
+    // unknown email costs the same bcrypt work as a wrong password. Short
+    // circuiting here answered a few milliseconds faster and let an attacker
+    // walk through the address list looking for that gap.
+    const passwordOk = user
+        ? await user.comparePassword(password)
+        : await bcrypt.compare(password, ABSENT_ACCOUNT_HASH);
+
+    if (!user || !passwordOk) {
         return next(new AppError('Incorrect email or password', 401));
     }
 
@@ -145,7 +177,12 @@ export const forgotPassword = catchAsync(async (req, res) => {
         // and the save must not fail on something the account already passed.
         await user.save({ validateBeforeSave: false });
 
-        await sendPasswordResetEmail({ to: user.email, name: user.name, rawToken });
+        // Sent after the reply, not before it. Awaiting Resend in front of
+        // res.json() made the known-address branch hundreds of milliseconds
+        // slower than the unknown one — a usable signal for anyone probing
+        // which addresses are registered. The function reports its own
+        // failures to the log, so nothing is lost by not awaiting it.
+        sendPasswordResetEmail({ to: user.email, name: user.name, rawToken });
     }
 
     res.json({
@@ -198,7 +235,7 @@ export const resetPassword = catchAsync(async (req, res, next) => {
 });
 
 export const logout = catchAsync(async (req, res) => {
-    res.clearCookie('token');
+    clearTokenCookie(res);
     res.json({ success: true, data: null });
 });
 

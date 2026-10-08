@@ -219,6 +219,85 @@ describe('categories require an admin', () => {
     });
 });
 
+describe('deactivated products never reach the public catalogue', () => {
+    // ApiFeatures.filter() used to run a SECOND find() with whatever the
+    // caller passed, overwriting the isActive: true the controller had just
+    // set — so ?isActive=false on this public endpoint published every
+    // product an admin had hidden.
+    const seed = async () => {
+        const category = await Category.create({ name: 'Shoes', slug: 'shoes' });
+        const base = {
+            name: 'Runner',
+            brand: 'TechU',
+            description: 'Used only by this test.',
+            priceFrom: 500000,
+            images: ['https://example.com/a.jpg'],
+            category: category._id,
+            variants: [{ size: '42', color: 'Black', sku: 'SEC-1', stock: 10 }],
+        };
+        await Product.create({ ...base, slug: 'visible-runner', variants: [{ ...base.variants[0], sku: 'SEC-1' }] });
+        await Product.create({
+            ...base,
+            name: 'Hidden Runner',
+            slug: 'hidden-runner',
+            isActive: false,
+            variants: [{ ...base.variants[0], sku: 'SEC-2' }],
+        });
+    };
+
+    const slugs = (res) => res.body.data.map((p) => p.slug);
+
+    it('ignores ?isActive=false from an anonymous caller', async () => {
+        await seed();
+
+        const res = await request(app).get('/api/v1/products').query({ isActive: 'false' });
+
+        expect(res.status).toBe(200);
+        expect(slugs(res)).not.toContain('hidden-runner');
+        expect(res.body.meta.total).toBe(1);
+    });
+
+    it('ignores it from a signed-in customer too', async () => {
+        await User.create({ name: 'Shopper', email: 'shopper@gmail.com', phone: '0802', password: 'password123' });
+        const login = await request(app)
+            .post('/api/v1/auth/login')
+            .send({ email: 'shopper@gmail.com', password: 'password123' });
+        await seed();
+
+        const res = await request(app)
+            .get('/api/v1/products')
+            .set('Cookie', login.headers['set-cookie'])
+            .query({ isActive: 'false' });
+
+        expect(res.status).toBe(200);
+        expect(slugs(res)).not.toContain('hidden-runner');
+    });
+
+    it('counts only the products it will actually return', async () => {
+        await seed();
+
+        const res = await request(app).get('/api/v1/products').query({ isActive: 'false', limit: 100 });
+
+        expect(res.body.meta.total).toBe(res.body.data.length);
+    });
+
+    it('still lets an admin manage the hidden rows', async () => {
+        await seed();
+
+        const hidden = await request(app)
+            .get('/api/v1/products')
+            .set('Cookie', adminCookie)
+            .query({ isActive: 'false' });
+
+        expect(hidden.status).toBe(200);
+        expect(slugs(hidden)).toContain('hidden-runner');
+        expect(hidden.body.meta.total).toBe(1);
+
+        const all = await request(app).get('/api/v1/products').set('Cookie', adminCookie);
+        expect(slugs(all)).toHaveLength(2);
+    });
+});
+
 describe('malformed ids answer 400, not 500', () => {
     it('rejects a non-ObjectId category id', async () => {
         const res = await request(app)

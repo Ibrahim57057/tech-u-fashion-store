@@ -95,3 +95,16 @@ export const resetPasswordLimiter = perUserLimiter({
     max: 10,
     message: 'Too many reset attempts. Please request a new link and try again.',
 });
+
+/**
+ * POST /newsletter/subscribe and /newsletter/unsubscribe. Both are public and
+ * both write to the subscriber table, so without a limit the list is a free
+ * fill-it-with-junk endpoint — and the bulk probes that enumeration attacks
+ * rely on cost nothing. Unsubscribe also needs a valid HMAC token now, so
+ * this is the second layer rather than the only one.
+ */
+export const newsletterLimiter = perUserLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    message: 'Too many newsletter requests. Please wait a few minutes and try again.',
+});
