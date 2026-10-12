@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
-import { mailerConfigured, FROM_ADDRESS } from '../../utils/mailer.js';
+import { mailerConfigured, FROM_ADDRESS, MAIL_TRANSPORT } from '../../utils/mailer.js';
 import { env } from '../../config/env.js';
 
 const router = Router();
@@ -21,9 +21,18 @@ router.get('/', (req, res) => {
             database: dbStates[mongoose.connection.readyState] || 'unknown',
             mail: {
                 configured: mailerConfigured,
-                transport: env.smtpHost ? 'smtp' : env.resendApiKey ? 'resend' : 'none',
-                host: env.smtpHost || null,
+                transport: MAIL_TRANSPORT,
                 from: FROM_ADDRESS,
+                // Host and presence flags only — never the credentials.
+                smtp: env.smtpHost
+                    ? {
+                          host: env.smtpHost,
+                          userSet: Boolean(env.smtpUser),
+                          passSet: Boolean(env.smtpPass),
+                          secure: env.smtpSecure,
+                          port: env.smtpPort,
+                      }
+                    : null,
             },
         },
     });

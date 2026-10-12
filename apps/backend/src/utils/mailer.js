@@ -34,6 +34,25 @@ function buildTransport() {
 
 const transport = buildTransport();
 
+/** Which transport is actually in use: 'smtp', 'resend' or 'none'. */
+export const MAIL_TRANSPORT = transport?.kind ?? 'none';
+
+// SMTP needs all three of host, user and password. A partially filled set is
+// almost always a dashboard typo, and silently falling back to Resend would
+// look like "mail only works for my own address" — so say it at boot.
+if (transport?.kind === 'smtp') {
+    console.log(`[mailer] sending via SMTP (${env.smtpHost})`);
+} else if (env.smtpHost || env.smtpUser || env.smtpPass) {
+    console.warn(
+        '[mailer] SMTP_HOST/USER/PASS are incomplete — falling back to Resend ' +
+            `(transport=${transport?.kind ?? 'none'})`,
+    );
+} else if (transport?.kind === 'resend') {
+    console.log('[mailer] sending via Resend');
+} else {
+    console.warn('[mailer] no mail transport configured');
+}
+
 /** Whether any mail transport is configured. */
 export const mailerConfigured = Boolean(transport);
 
