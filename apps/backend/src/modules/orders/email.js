@@ -3,9 +3,8 @@ import { sendMail, mailerConfigured } from '../../utils/mailer.js';
 import { formatNaira } from './formatNaira.js';
 
 /**
- * Sends an order confirmation. If no mail transport is configured (see
- * utils/mailer.js), this quietly does nothing instead of crashing the order
- * flow — a missing email must never stop a real order from completing.
+ * Sends an order confirmation. Skips silently when no transport is
+ * configured so a missing mailer never blocks a completed order.
  */
 export async function sendOrderConfirmationEmail(order) {
     if (!mailerConfigured || !order.contact.email) return;
@@ -40,7 +39,7 @@ export async function sendOrderConfirmationEmail(order) {
       `,
         });
     } catch (err) {
-        // A failed email should never break the order. Log it, move on.
+        // A failed email must never break the order flow.
         console.error('Failed to send order confirmation email:', err.message);
     }
 }

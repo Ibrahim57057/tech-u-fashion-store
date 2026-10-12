@@ -3,24 +3,20 @@ import { escapeHtml } from '../../utils/html.js';
 import { sendMail, mailerConfigured } from '../../utils/mailer.js';
 
 /**
- * Sends the "reset your password" link.
+ * Emails the password-reset link.
  *
- * The URL is built from env.clientUrl, the same origin CORS is locked to, so
- * the link lands on the storefront the user actually came from rather than
- * whatever host Render happens to expose the app on today.
- *
- * `rawToken` is the only place the unhashed token appears — the database
- * stores just its SHA-256. It is passed straight into the link and never
- * logged.
+ * The URL is built from env.clientUrl so the link lands on the origin the
+ * customer came from. `rawToken` is the only place the unhashed token exists
+ * — the database stores its SHA-256 — and it goes straight into the link,
+ * never the logs.
  */
 export async function sendPasswordResetEmail({ to, name, rawToken }) {
     const resetUrl = `${env.clientUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
     const recipientName = escapeHtml(name || 'there');
 
-    // No transport means local development. Printing the link is the only way
-    // to walk the flow without a mail account, and it is unreachable in
-    // production because NODE_ENV=production refuses to start without one
-    // (see env.js).
+    // Local-development fallback: print the link instead of requiring mail
+    // credentials. Unreachable in production, which refuses to start without
+    // a transport (see env.js).
     if (!mailerConfigured) {
         console.warn(`[password-reset] no mail transport configured. Reset link for ${to}: ${resetUrl}`);
         return { skipped: true };
@@ -68,9 +64,7 @@ export async function sendPasswordResetEmail({ to, name, rawToken }) {
             text: `Hi ${name || 'there'},\n\nChoose a new password for your TECH-U Fashion Store account:\n\n${resetUrl}\n\nThis link expires in 15 minutes and can be used once.\n\nIf you did not ask for a change, you can ignore this email.\n`,
         });
     } catch (error) {
-        // Never let a mail provider failure turn into a 500 for the customer:
-        // the API returns the generic success either way, and this surfaces in
-        // the server log with the reason.
+        // Mail failures must not surface as a 500; log and report the generic result.
         console.error(`[password-reset] failed to email ${to}:`, error.message);
         return { sent: false };
     }

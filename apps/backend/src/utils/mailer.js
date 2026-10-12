@@ -3,19 +3,14 @@ import { Resend } from 'resend';
 import { env } from '../config/env.js';
 
 /**
- * One mail transport for the whole app, chosen once at import.
+ * Resolves the app-wide mail transport from configuration, so switching
+ * providers is an environment change rather than a code change:
  *
- * Two senders are supported and the transport is picked from configuration,
- * so switching provider is an environment change, not a code change:
+ * - SMTP_HOST/USER/PASS -> Nodemailer (Gmail, Brevo, SMTP2GO, ...)
+ * - otherwise RESEND_API_KEY -> Resend
  *
- *   - SMTP_* + MAIL_FROM  -> Nodemailer (Gmail app passwords, Brevo,
- *                            SMTP2GO, any server that speaks SMTP)
- *   - RESEND_API_KEY only  -> Resend
- *
- * Resend's `onboarding@resend.dev` sender is a sandbox: until a domain is
- * verified, that address can only deliver to the account owner's own inbox,
- * which is exactly why reset links "worked" for one Gmail and no other.
- * SMTP moves the sending account somewhere that may mail anyone.
+ * Resend's unverified `onboarding@resend.dev` sender can only deliver to the
+ * account owner's inbox, hence the preference for SMTP in production.
  */
 function buildTransport() {
     if (env.smtpHost && env.smtpUser && env.smtpPass) {
@@ -39,22 +34,17 @@ function buildTransport() {
 
 const transport = buildTransport();
 
-/** True when at least one sender is configured. Callers skip gracefully. */
+/** Whether any mail transport is configured. */
 export const mailerConfigured = Boolean(transport);
 
-/**
- * The From line. Required over SMTP (a server like Gmail refuses to send
- * from an address it does not own), and confusing to leave blank even when a
- * provider would accept it.
- */
+/** From address for outbound mail. Required explicitly over SMTP. */
 export const FROM_ADDRESS =
     env.mailFrom ||
     (transport?.kind === 'resend' ? 'TECH-U Fashion Store <onboarding@resend.dev>' : '');
 
 /**
- * Sends one message through whichever transport is configured.
- * Returns false when nothing is configured, so the caller's `return;`
- * guard needs no knowledge of the provider.
+ * Sends a message through the configured transport.
+ * Returns false when no transport is configured.
  */
 export async function sendMail({ to, subject, html, text = '' }) {
     if (!transport) return false;

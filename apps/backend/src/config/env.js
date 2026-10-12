@@ -17,25 +17,15 @@ const clientUrls = (process.env.CLIENT_URL || 'http://localhost:5173')
 
 const nodeEnv = process.env.NODE_ENV || 'development';
 
-// Fail fast in production rather than starting up in a quietly broken state.
-//
-// Every secret below used to default to '' and nothing checked, so a deploy
-// that forgot NODE_ENV=production ran with `secure: false` on the session
-// cookie (sent over plain HTTP), CORS open to any localhost origin, and no
-// JWT secret — where jsonwebtoken only fails later, at the first login, as a
-// 500. A refused start is a much better outcome than a quietly unsafe one.
-//
-// Development and test keep the permissive defaults on purpose: a contributor
-// should be able to `npm run dev` with nothing configured.
+// Production fails fast at startup rather than running quietly broken: every
+// secret used to default to '' and nothing checked. Dev keeps permissive
+// defaults so `npm run dev` works with no configuration.
 if (nodeEnv === 'production') {
     required('MONGO_URI');
     required('CLIENT_URL');
     required('PAYSTACK_SECRET_KEY');
 
-    // One mail transport or the other. Resend's unverified onboarding sender
-    // can only reach the account owner, so a team that needs real mail usually
-    // switches to SMTP (see utils/mailer.js); either way production must start
-    // with a sender, not discover it has none on the first order.
+    // Require exactly one mail transport: SMTP, or Resend.
     const smtpConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
     if (!process.env.RESEND_API_KEY && !smtpConfigured) {
         throw new Error('Set RESEND_API_KEY, or SMTP_HOST + SMTP_USER + SMTP_PASS, for email in production');
@@ -46,10 +36,7 @@ if (nodeEnv === 'production') {
 
     const jwtSecret = required('JWT_SECRET');
 
-    // Pasted env vars very often arrive with a stray trailing newline or an
-    // unbalanced quote, and that is invisible in a dashboard. It would still be
-    // long enough to pass a length check while being the wrong value, so say so
-    // explicitly rather than letting it fail later as a mystery 500.
+    // Catch stray whitespace/quotes in pasted values before they fail later as a mystery 500.
     if (jwtSecret !== jwtSecret.trim() || /^["'].*["']$/.test(jwtSecret)) {
         throw new Error(
             'JWT_SECRET has surrounding whitespace or quotes. Paste the raw value with no ' +
@@ -57,8 +44,7 @@ if (nodeEnv === 'production') {
         );
     }
 
-    // 32 characters = 256 bits, the minimum HS256 key size. The length is
-    // reported (never the value) so the failure is diagnosable from the log.
+    // Minimum HS256 key size is 256 bits (32 characters).
     if (jwtSecret.length < 32) {
         throw new Error(
             `JWT_SECRET must be at least 32 characters in production (got ${jwtSecret.length}). ` +
