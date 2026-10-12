@@ -31,7 +31,18 @@ if (nodeEnv === 'production') {
     required('MONGO_URI');
     required('CLIENT_URL');
     required('PAYSTACK_SECRET_KEY');
-    required('RESEND_API_KEY');
+
+    // One mail transport or the other. Resend's unverified onboarding sender
+    // can only reach the account owner, so a team that needs real mail usually
+    // switches to SMTP (see utils/mailer.js); either way production must start
+    // with a sender, not discover it has none on the first order.
+    const smtpConfigured = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS;
+    if (!process.env.RESEND_API_KEY && !smtpConfigured) {
+        throw new Error('Set RESEND_API_KEY, or SMTP_HOST + SMTP_USER + SMTP_PASS, for email in production');
+    }
+    if (smtpConfigured && !process.env.MAIL_FROM) {
+        throw new Error('MAIL_FROM is required when sending over SMTP, e.g. "TECH-U Fashion Store <noreply@yourdomain.com>"');
+    }
 
     const jwtSecret = required('JWT_SECRET');
 
@@ -70,6 +81,12 @@ export const env = {
     jwtSecret: process.env.JWT_SECRET || '',
     paystackSecretKey: process.env.PAYSTACK_SECRET_KEY || '',
     resendApiKey: process.env.RESEND_API_KEY || '',
+    smtpHost: process.env.SMTP_HOST || '',
+    smtpPort: Number(process.env.SMTP_PORT) || 587,
+    smtpUser: process.env.SMTP_USER || '',
+    smtpPass: process.env.SMTP_PASS || '',
+    smtpSecure: process.env.SMTP_SECURE === 'true',
+    mailFrom: process.env.MAIL_FROM || '',
     cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
     cloudinaryApiKey: process.env.CLOUDINARY_API_KEY || '',
     cloudinaryApiSecret: process.env.CLOUDINARY_API_SECRET || '',

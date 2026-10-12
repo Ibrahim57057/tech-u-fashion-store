@@ -38,6 +38,23 @@ services:
         sync: false
       - key: RESEND_API_KEY
         sync: false
+      # Set either the SMTP block (below) or RESEND_API_KEY — not necessarily
+      # both. SMTP (Gmail app password, Brevo, SMTP2GO, ...) reaches any
+      # recipient; Resend's unverified onboarding sender only reaches the
+      # account owner. SMTP_HOST + SMTP_USER + SMTP_PASS alone switches the
+      # app to Nodemailer; MAIL_FROM is then required.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: MAIL_FROM
+        sync: false
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY

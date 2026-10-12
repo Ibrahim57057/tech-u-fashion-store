@@ -1,19 +1,67 @@
+import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import { env } from '../config/env.js';
 
 /**
- * One Resend client for the whole app, built once at import.
+ * One mail transport for the whole app, chosen once at import.
  *
- * The order and password-reset emails each need a client, and two copies of
- * `env.resendApiKey ? new Resend(...) : null` is two places to forget the
- * "no key means no email" guard. A missing key is normal in development, so
- * this is null rather than an error — callers check and skip.
+ * Two senders are supported and the transport is picked from configuration,
+ * so switching provider is an environment change, not a code change:
+ *
+ *   - SMTP_* + MAIL_FROM  -> Nodemailer (Gmail app passwords, Brevo,
+ *                            SMTP2GO, any server that speaks SMTP)
+ *   - RESEND_API_KEY only  -> Resend
+ *
+ * Resend's `onboarding@resend.dev` sender is a sandbox: until a domain is
+ * verified, that address can only deliver to the account owner's own inbox,
+ * which is exactly why reset links "worked" for one Gmail and no other.
+ * SMTP moves the sending account somewhere that may mail anyone.
  */
-export const resend = env.resendApiKey ? new Resend(env.resendApiKey) : null;
+function buildTransport() {
+    if (env.smtpHost && env.smtpUser && env.smtpPass) {
+        return {
+            kind: 'smtp',
+            client: nodemailer.createTransport({
+                host: env.smtpHost,
+                port: env.smtpPort,
+                secure: env.smtpSecure,
+                auth: { user: env.smtpUser, pass: env.smtpPass },
+            }),
+        };
+    }
+
+    if (env.resendApiKey) {
+        return { kind: 'resend', client: new Resend(env.resendApiKey) };
+    }
+
+    return null;
+}
+
+const transport = buildTransport();
+
+/** True when at least one sender is configured. Callers skip gracefully. */
+export const mailerConfigured = Boolean(transport);
 
 /**
- * Verified on the Resend account while the domain is unverified. Replace with
- * a domain you control before sending at volume: onboarding@resend.dev can
- * only deliver to addresses on the Resend account itself.
+ * The From line. Required over SMTP (a server like Gmail refuses to send
+ * from an address it does not own), and confusing to leave blank even when a
+ * provider would accept it.
  */
-export const FROM_ADDRESS = 'TECH-U Fashion Store <onboarding@resend.dev>';
+export const FROM_ADDRESS =
+    env.mailFrom ||
+    (transport?.kind === 'resend' ? 'TECH-U Fashion Store <onboarding@resend.dev>' : '');
+
+/**
+ * Sends one message through whichever transport is configured.
+ * Returns false when nothing is configured, so the caller's `return;`
+ * guard needs no knowledge of the provider.
+ */
+export async function sendMail({ to, subject, html, text = '' }) {
+    if (!transport) return false;
+    if (transport.kind === 'resend') {
+        await transport.client.emails.send({ from: FROM_ADDRESS, to, subject, html, text });
+        return true;
+    }
+    await transport.client.sendMail({ from: FROM_ADDRESS, to, subject, html, text });
+    return true;
+}

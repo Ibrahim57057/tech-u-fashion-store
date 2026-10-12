@@ -1,14 +1,14 @@
 import { escapeHtml } from '../../utils/html.js';
-import { resend, FROM_ADDRESS } from '../../utils/mailer.js';
+import { sendMail, mailerConfigured } from '../../utils/mailer.js';
 import { formatNaira } from './formatNaira.js';
 
 /**
- * Sends an order confirmation. If Resend isn't configured (no key in
- * .env), this quietly does nothing instead of crashing the order flow
- * — a missing email should never stop a real order from completing.
+ * Sends an order confirmation. If no mail transport is configured (see
+ * utils/mailer.js), this quietly does nothing instead of crashing the order
+ * flow — a missing email must never stop a real order from completing.
  */
 export async function sendOrderConfirmationEmail(order) {
-    if (!resend || !order.contact.email) return;
+    if (!mailerConfigured || !order.contact.email) return;
 
     const itemsHtml = order.items
         .map(
@@ -21,8 +21,7 @@ export async function sendOrderConfirmationEmail(order) {
         .join('');
 
     try {
-        await resend.emails.send({
-            from: FROM_ADDRESS,
+        await sendMail({
             to: order.contact.email,
             subject: `Order confirmed — ${order.orderNumber}`,
             html: `

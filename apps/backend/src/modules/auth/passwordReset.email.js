@@ -1,6 +1,6 @@
 import { env } from '../../config/env.js';
 import { escapeHtml } from '../../utils/html.js';
-import { resend, FROM_ADDRESS } from '../../utils/mailer.js';
+import { sendMail, mailerConfigured } from '../../utils/mailer.js';
 
 /**
  * Sends the "reset your password" link.
@@ -17,11 +17,12 @@ export async function sendPasswordResetEmail({ to, name, rawToken }) {
     const resetUrl = `${env.clientUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
     const recipientName = escapeHtml(name || 'there');
 
-    // No key means local development. Printing the link is the only way to
-    // walk the flow without a Resend account, and it is unreachable in
-    // production because NODE_ENV=production refuses to start without a key.
-    if (!resend) {
-        console.warn(`[password-reset] RESEND_API_KEY not set. Reset link for ${to}: ${resetUrl}`);
+    // No transport means local development. Printing the link is the only way
+    // to walk the flow without a mail account, and it is unreachable in
+    // production because NODE_ENV=production refuses to start without one
+    // (see env.js).
+    if (!mailerConfigured) {
+        console.warn(`[password-reset] no mail transport configured. Reset link for ${to}: ${resetUrl}`);
         return { skipped: true };
     }
 
@@ -60,8 +61,7 @@ export async function sendPasswordResetEmail({ to, name, rawToken }) {
 </html>`;
 
     try {
-        await resend.emails.send({
-            from: FROM_ADDRESS,
+        await sendMail({
             to,
             subject: 'Reset your TECH-U Fashion Store password',
             html,
