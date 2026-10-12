@@ -67,10 +67,15 @@ export const FROM_ADDRESS =
  */
 export async function sendMail({ to, subject, html, text = '' }) {
     if (!transport) return false;
+
     if (transport.kind === 'resend') {
         await transport.client.emails.send({ from: FROM_ADDRESS, to, subject, html, text });
-        return true;
+    } else {
+        await transport.client.sendMail({ from: FROM_ADDRESS, to, subject, html, text });
     }
-    await transport.client.sendMail({ from: FROM_ADDRESS, to, subject, html, text });
+
+    // One line per send, so the logs show delivery (or the absence of it)
+    // without needing a debug endpoint.
+    console.log(`[mailer] sent via ${transport.kind} to ${to}`);
     return true;
 }
