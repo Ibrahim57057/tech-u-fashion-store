@@ -4,6 +4,7 @@ import DeliveryZone from './deliveryZone.model.js';
 import Product from '../catalog/product.model.js';
 import { catchAsync } from '../../middleware/catchAsync.js';
 import { AppError } from '../../middleware/errorHandler.js';
+import { asScalar } from '../../middleware/sanitize.js';
 import { ORDER_STATUS, ORDER_STATUS_TRANSITIONS, PAYMENT_METHOD } from '../../utils/constants.js';
 import { sendOrderConfirmationEmail } from './email.js';
 import { ApiFeatures } from '../../utils/apiFeatures.js';
@@ -113,7 +114,8 @@ export const getMyOrders = catchAsync(async (req, res) => {
     const limit = Math.min(Math.max(1, Number(req.safeQuery.limit) || 20), 100);
 
     const filter = { user: req.user._id };
-    if (req.safeQuery.status) filter.status = req.safeQuery.status;
+    const status = asScalar(req.safeQuery.status);
+    if (status) filter.status = status;
 
     const [orders, total] = await Promise.all([
         Order.find(filter)

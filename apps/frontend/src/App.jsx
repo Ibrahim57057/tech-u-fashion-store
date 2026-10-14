@@ -28,6 +28,7 @@ const LoginPage = lazy(() => import("./pages/LoginPage.jsx"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage.jsx"));
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage.jsx"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage.jsx"));
+const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage.jsx"));
 const AccountPage = lazy(() => import("./pages/AccountPage.jsx"));
 const WishlistPage = lazy(() => import("./pages/WishlistPage.jsx"));
 const AboutPage = lazy(() => import("./pages/AboutPage.jsx"));
@@ -116,6 +117,7 @@ export default function App() {
                   to index.html for that reason. */}
               <Route path='/forgot-password' element={<ForgotPasswordPage />} />
               <Route path='/reset-password' element={<ResetPasswordPage />} />
+              <Route path='/verify-email' element={<VerifyEmailPage />} />
               <Route path='/account' element={<AccountPage />} />
               <Route path='/wishlist' element={<WishlistPage />} />
               <Route path='/about' element={<AboutPage />} />

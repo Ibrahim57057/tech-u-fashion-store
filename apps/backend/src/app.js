@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit';
 import { env } from './config/env.js';
 import { notFoundHandler, globalErrorHandler } from './middleware/errorHandler.js';
 import { sanitizeRequest } from './middleware/sanitize.js';
+import { verifyCsrfOrigin } from './middleware/csrf.js';
 
 import healthRouter from './modules/health/health.routes.js';
 import catalogRouter from './modules/catalog/catalog.routes.js';
@@ -75,6 +76,19 @@ export function createApp() {
 
     app.use(cookieParser());
     app.use(sanitizeRequest);
+    app.use(verifyCsrfOrigin);
+
+    // Broad ceiling on the whole API, so a single address cannot hammer any
+    // endpoint that lacks its own limiter. The per-route limits below are the
+    // tighter, meaningful ones; this is the backstop.
+    const globalLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000,
+        max: env.nodeEnv === 'test' ? 100_000 : 500,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: { success: false, error: { message: 'Too many requests, please slow down.' } },
+    });
+    app.use('/api/v1', globalLimiter);
 
     // 10 login/register attempts per 15 minutes per IP. Under NODE_ENV=test the
     // budget is effectively removed, because the suite deliberately fires

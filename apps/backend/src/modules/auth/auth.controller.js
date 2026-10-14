@@ -1,9 +1,12 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
+import { generateSecret, generateURI, verify } from 'otplib';
+import QRCode from 'qrcode';
 import User from './user.model.js';
 import { catchAsync } from '../../middleware/catchAsync.js';
 import { AppError } from '../../middleware/errorHandler.js';
-import { signToken } from '../../config/jwt.js';
+import { asScalar } from '../../middleware/sanitize.js';
+import { signToken, signTwoFactorTicket, verifyToken } from '../../config/jwt.js';
 import { env } from '../../config/env.js';
 import {
     assertValidEmail,
@@ -12,96 +15,152 @@ import {
     isDuplicateKeyError,
     DUPLICATE_EMAIL_MESSAGE,
 } from '../../utils/emailValidation.js';
+import { generateRawToken, hashToken } from '../../utils/tokens.js';
 import { sendPasswordResetEmail } from './passwordReset.email.js';
+import { sendVerificationEmail } from './verification.email.js';
 
-/** How long a reset link stays usable. Short on purpose: the message has to
- *  arrive, the customer clicks it, and nothing else. Fifteen minutes is the
- *  usual balance between "email is slow" and "a lost link is not a hostage". */
 const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
+const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_REFRESH_SESSIONS = 5;
 
-/** SHA-256 of the raw token. Never store the raw one — a database dump must
- *  not be enough to take over an account. */
-function hashToken(rawToken) {
-    return crypto.createHash('sha256').update(rawToken).digest('hex');
-}
+const ACCESS_COOKIE_MAX_AGE = 15 * 60 * 1000;
 
-/** A real bcrypt hash, at the same cost as a stored password (12), of a value
- *  no login attempt can ever equal. login() compares against it when the
- *  address has no account so both branches do identical work. It is not a
- *  secret — it protects nothing and can live in the source. */
 const ABSENT_ACCOUNT_HASH = '$2b$12$BIWIrCeX0x9vxl0fP0Xj0ORzD3M/U63GHE3aVDDDOjhe/O1Ta3PVu';
 
-// Sends the token as an httpOnly cookie — JavaScript in the browser
-// can't read it (protecting against XSS stealing it), but the browser
-// automatically sends it back on every request to our API.
-function sendTokenCookie(res, token) {
-    const isProd = env.nodeEnv === 'production';
-    res.cookie('token', token, {
-        httpOnly: true,
-        secure: isProd, // SameSite: 'none' requires Secure, browsers reject it otherwise
-        sameSite: isProd ? 'none' : 'lax',
-        maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
-}
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCK_MS = 15 * 60 * 1000;
+
+const TOTP_ISSUER = 'TECH-U Fashion Store';
+const RECOVERY_CODE_COUNT = 10;
 
 /**
- * Deletes the cookie with the exact attributes it was set with.
+ * Verifies a TOTP code, treating a malformed one as simply wrong.
  *
- * clearCookie('token') on its own sent no httpOnly/secure/sameSite flags, and
- * a mismatch there can leave the 30-day session alive after logout — the
- * visitor believes they signed out while the browser keeps sending the token.
+ * otplib throws (TokenLengthError) on anything that is not six digits, and the
+ * same field also accepts a twelve-character recovery code, so a thrown error
+ * here would surface as a 500 instead of "that code is not correct".
  */
-function clearTokenCookie(res) {
+async function verifyTotp(secret, token) {
+    try {
+        return (await verify({ secret, token, epochTolerance: 30 })).valid;
+    } catch {
+        return false;
+    }
+}
+
+async function recordFailedLogin(user) {
+    const attempts = (user.failedLoginAttempts ?? 0) + 1;
+    const update = { failedLoginAttempts: attempts };
+    if (attempts >= MAX_LOGIN_ATTEMPTS) update.lockUntil = new Date(Date.now() + LOGIN_LOCK_MS);
+
+    await User.updateOne({ _id: user._id }, { $set: update });
+}
+
+function baseCookieOptions(path) {
     const isProd = env.nodeEnv === 'production';
-    res.clearCookie('token', {
+    return {
         httpOnly: true,
         secure: isProd,
         sameSite: isProd ? 'none' : 'lax',
-        path: '/',
+        path,
+    };
+}
+
+const ACCESS_COOKIE_PATH = '/';
+// Scoped to the auth routes: the refresh cookie is only ever sent to
+// /auth/refresh and /auth/logout, so an XSS on any other page cannot quietly
+// use it to mint new access tokens.
+const REFRESH_COOKIE_PATH = '/api/v1/auth';
+
+function sendTokenCookie(res, token) {
+    res.cookie('token', token, { ...baseCookieOptions(ACCESS_COOKIE_PATH), maxAge: ACCESS_COOKIE_MAX_AGE });
+}
+
+function clearTokenCookie(res) {
+    res.clearCookie('token', baseCookieOptions(ACCESS_COOKIE_PATH));
+}
+
+function sendRefreshCookie(res, rawToken) {
+    res.cookie('refresh_token', rawToken, {
+        ...baseCookieOptions(REFRESH_COOKIE_PATH),
+        maxAge: REFRESH_TOKEN_TTL_MS,
     });
 }
 
-/**
- * The user object we hand to the browser.
- *
- * `role` has to be in here. The frontend decides whether to show the admin
- * link from user.role, so omitting it from the register and login responses
- * meant the admin link vanished the moment you signed in and only reappeared
- * after a full page refresh, when /auth/me got a chance to supply the role.
- */
+function clearRefreshCookie(res) {
+    res.clearCookie('refresh_token', baseCookieOptions(REFRESH_COOKIE_PATH));
+}
+
+/** Stores the SHA-256 of a fresh refresh token and sets the cookie. */
+async function issueRefreshToken(res, user) {
+    const rawToken = generateRawToken();
+    await User.updateOne(
+        { _id: user._id },
+        {
+            $push: {
+                refreshTokens: {
+                    $each: [
+                        { tokenHash: hashToken(rawToken), expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS) },
+                    ],
+                    $slice: -MAX_REFRESH_SESSIONS,
+                },
+            },
+        },
+    );
+    sendRefreshCookie(res, rawToken);
+}
+
+/** Starts a full session: short-lived access cookie plus a rotating refresh. */
+async function startSession(res, user) {
+    sendTokenCookie(res, signToken(user));
+    await issueRefreshToken(res, user);
+}
+
 function publicUser(user) {
     return {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         role: user.role,
+        createdAt: user.createdAt,
+        isEmailVerified: user.isEmailVerified === true,
+        pendingEmail: user.pendingEmail,
+        twoFactorEnabled: user.twoFactorEnabled === true,
     };
 }
 
 export const register = catchAsync(async (req, res, next) => {
     const { name, phone, password } = req.body;
-
-    // Rejects malformed addresses, known typo domains like gamil.com, and
-    // domains with no mail servers at all.
     const email = await assertValidEmail(req.body.email);
 
-    // Checked on the canonical form, so John.Doe@gmail.com cannot slip past
-    // the johndoe@gmail.com account that already exists.
     const canonical = toCanonicalEmail(email);
     if (await User.exists({ canonicalEmail: canonical })) {
         return next(new AppError(DUPLICATE_EMAIL_MESSAGE, 409));
     }
 
+    const rawVerifyToken = generateRawToken();
+
     try {
-        const user = await User.create({ name, email, phone, password });
-        const token = signToken(user._id);
-        sendTokenCookie(res, token);
+        const user = await User.create({
+            name,
+            email,
+            phone,
+            password,
+            emailVerificationToken: hashToken(rawVerifyToken),
+            emailVerificationExpires: new Date(Date.now() + VERIFY_TOKEN_TTL_MS),
+        });
+
+        await startSession(res, user);
+
+        // After the reply, like the reset mail: awaiting the transport here
+        // would make registration slower than it needs to be, and the function
+        // reports its own failures to the log.
+        sendVerificationEmail({ to: user.email, name: user.name, rawToken: rawVerifyToken });
 
         res.status(201).json({ success: true, data: publicUser(user) });
     } catch (err) {
-        // Two people can submit the same address in the same instant and both
-        // pass the check above. The database has the final say, so translate
-        // its verdict into the same friendly 409 rather than a 500.
         if (isDuplicateKeyError(err)) {
             return next(new AppError(DUPLICATE_EMAIL_MESSAGE, 409));
         }
@@ -111,77 +170,310 @@ export const register = catchAsync(async (req, res, next) => {
 
 export const login = catchAsync(async (req, res, next) => {
     const { password } = req.body;
-
-    // Normalised so signing in as "Ismail@Gmail.com" finds the stored
-    // "ismail@gmail.com" instead of reporting a wrong password.
     const email = normalizeEmail(req.body.email);
 
-    // .select('+password') overrides the schema's select: false, just
-    // for this one query, since we genuinely need it here to compare.
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select(
+        '+password +tokenVersion +failedLoginAttempts +lockUntil',
+    );
 
-    // The comparison always runs, even for an address with no account, so an
-    // unknown email costs the same bcrypt work as a wrong password. Short
-    // circuiting here answered a few milliseconds faster and let an attacker
-    // walk through the address list looking for that gap.
+    if (user?.lockUntil && user.lockUntil > new Date()) {
+        return next(new AppError('Too many failed attempts. Please try again in a few minutes.', 429));
+    }
+
     const passwordOk = user
         ? await user.comparePassword(password)
         : await bcrypt.compare(password, ABSENT_ACCOUNT_HASH);
 
     if (!user || !passwordOk) {
+        if (user) await recordFailedLogin(user);
         return next(new AppError('Incorrect email or password', 401));
     }
 
-    // Checked after the password compare on purpose. A suspended account must
-    // still be told "incorrect password" for a wrong password, so this cannot
-    // become an oracle for which addresses have accounts.
     if (user.isActive === false) {
         return next(new AppError('This account has been suspended. Please contact support.', 403));
     }
 
-    const token = signToken(user._id);
-    sendTokenCookie(res, token);
+    if (user.failedLoginAttempts || user.lockUntil) {
+        await User.updateOne(
+            { _id: user._id },
+            { $set: { failedLoginAttempts: 0 }, $unset: { lockUntil: '' } },
+        );
+    }
 
+    // With 2FA on, a correct password only earns a short ticket. The session is
+    // not created until a valid code is supplied.
+    if (user.twoFactorEnabled) {
+        return res.json({
+            success: true,
+            data: { twoFactorRequired: true, ticket: signTwoFactorTicket(user) },
+        });
+    }
+
+    await startSession(res, user);
     res.json({ success: true, data: publicUser(user) });
 });
 
 /**
- * POST /auth/forgot-password — emails a reset link.
+ * POST /auth/2fa/authenticate â€” completes a login that stopped at the code.
  *
- * The reply is byte-for-byte the same whether or not an account exists for
- * the address. Anything else turns this endpoint into a free oracle for
- * checking which emails are registered at the store, which is the first step
- * of most credential-stuffing runs.
- *
- * The rate limiter on the route is the other half of that: without it, a
- * flood here becomes a flood of mail from the Resend account, which is a fast
- * way to get the sending domain suspended.
+ * The ticket carries no session; it only proves the password step. A valid
+ * TOTP code (or an unused recovery code) turns it into a real session.
  */
+export const authenticateTwoFactor = catchAsync(async (req, res, next) => {
+    const { ticket, code } = req.body;
+
+    let decoded;
+    try {
+        decoded = verifyToken(ticket);
+    } catch {
+        return next(new AppError('Your verification session expired. Please log in again.', 401));
+    }
+    if (decoded.scope !== '2fa') {
+        return next(new AppError('Invalid verification session. Please log in again.', 401));
+    }
+
+    const user = await User.findById(decoded.id).select(
+        '+tokenVersion +twoFactorSecret +twoFactorRecoveryCodes',
+    );
+    if (!user || !user.twoFactorEnabled) {
+        return next(new AppError('Invalid verification session. Please log in again.', 401));
+    }
+    if (user.isActive === false) {
+        return next(new AppError('This account has been suspended. Please contact support.', 403));
+    }
+
+    let accepted = await verifyTotp(user.twoFactorSecret, code);
+    let usedRecoveryCode = false;
+
+    if (!accepted && Array.isArray(user.twoFactorRecoveryCodes)) {
+        const hashed = hashToken(String(code).trim());
+        if (user.twoFactorRecoveryCodes.includes(hashed)) {
+            accepted = true;
+            usedRecoveryCode = true;
+            // Single-use: an observed recovery code is worth nothing after this.
+            user.twoFactorRecoveryCodes = user.twoFactorRecoveryCodes.filter((c) => c !== hashed);
+        }
+    }
+
+    if (!accepted) {
+        return next(new AppError('That code is not correct. Please try again.', 401));
+    }
+
+    if (usedRecoveryCode) await user.save({ validateBeforeSave: false });
+
+    await startSession(res, user);
+    res.json({ success: true, data: publicUser(user) });
+});
+
+/**
+ * POST /auth/refresh â€” trades a valid refresh cookie for a new access cookie.
+ *
+ * Rotation: the presented token is deleted first, then a fresh one is issued.
+ * Replaying a stolen refresh token therefore fails, because its hash is gone.
+ */
+export const refresh = catchAsync(async (req, res, next) => {
+    const rawToken = req.cookies.refresh_token;
+    if (!rawToken) {
+        return next(new AppError('Your session has ended. Please log in again.', 401));
+    }
+
+    const tokenHash = hashToken(rawToken);
+    const user = await User.findOne({ 'refreshTokens.tokenHash': tokenHash }).select(
+        '+tokenVersion +refreshTokens',
+    );
+    if (!user) {
+        return next(new AppError('Your session has ended. Please log in again.', 401));
+    }
+
+    const entry = user.refreshTokens.find((t) => t.tokenHash === tokenHash);
+    await User.updateOne({ _id: user._id }, { $pull: { refreshTokens: { tokenHash } } });
+
+    if (!entry || entry.expiresAt < new Date()) {
+        return next(new AppError('Your session has ended. Please log in again.', 401));
+    }
+    if (user.isActive === false) {
+        return next(new AppError('This account has been suspended. Please contact support.', 403));
+    }
+
+    await startSession(res, user);
+    res.json({ success: true, data: publicUser(user) });
+});
+
+/**
+ * POST /auth/verify-email â€” consumes the emailed token.
+ *
+ * One endpoint serves both signup confirmation and an email change; it decides
+ * which by which stored hash matches.
+ */
+export const verifyEmail = catchAsync(async (req, res, next) => {
+    const hashed = hashToken(req.body.token);
+
+    const user = await User.findOne({
+        $or: [{ emailVerificationToken: hashed }, { pendingEmailToken: hashed }],
+    }).select('+emailVerificationToken +emailVerificationExpires +pendingEmailToken +pendingEmailExpires');
+
+    if (!user) {
+        return next(new AppError('This confirmation link is invalid or has already been used.', 400));
+    }
+
+    const isSignup = user.emailVerificationToken === hashed;
+    const expiresAt = isSignup ? user.emailVerificationExpires : user.pendingEmailExpires;
+
+    if (!expiresAt || expiresAt < new Date()) {
+        return next(new AppError('This confirmation link has expired. Please request a new one.', 400));
+    }
+
+    if (isSignup) {
+        user.isEmailVerified = true;
+        user.emailVerificationToken = undefined;
+        user.emailVerificationExpires = undefined;
+    } else {
+        user.email = user.pendingEmail;
+        user.pendingEmail = undefined;
+        user.pendingEmailToken = undefined;
+        user.pendingEmailExpires = undefined;
+        user.isEmailVerified = true;
+    }
+
+    // Full save (not validateBeforeSave:false): changing the email has to run
+    // the pre-validate hook so canonicalEmail is recomputed.
+    await user.save();
+
+    res.json({ success: true, data: publicUser(user) });
+});
+
+/** POST /auth/resend-verification â€” sends a fresh signup confirmation. */
+export const resendVerification = catchAsync(async (req, res) => {
+    if (req.user.isEmailVerified) {
+        return res.json({ success: true, data: { message: 'Your email is already confirmed.' } });
+    }
+
+    const rawToken = generateRawToken();
+    req.user.emailVerificationToken = hashToken(rawToken);
+    req.user.emailVerificationExpires = new Date(Date.now() + VERIFY_TOKEN_TTL_MS);
+    await req.user.save({ validateBeforeSave: false });
+
+    sendVerificationEmail({ to: req.user.email, name: req.user.name, rawToken });
+
+    res.json({
+        success: true,
+        data: { message: 'Confirmation email sent. Check your inbox.' },
+    });
+});
+
+/**
+ * PATCH /auth/me/email â€” asks to move the account to a new address.
+ *
+ * The change is held as pendingEmail and never applied until the NEW address
+ * clicks its link, so a typo cannot lock the owner out, and a stolen session
+ * still needs the current password to start the change.
+ */
+export const changeEmail = catchAsync(async (req, res, next) => {
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) return next(new AppError('User not found', 404));
+
+    if (!(await user.comparePassword(req.body.password))) {
+        return next(new AppError('Your password is incorrect', 401));
+    }
+
+    const email = await assertValidEmail(req.body.email);
+    if (email === user.email) {
+        return next(new AppError('That is already your email address', 400));
+    }
+
+    const canonical = toCanonicalEmail(email);
+    if (await User.exists({ canonicalEmail: canonical, _id: { $ne: user._id } })) {
+        return next(new AppError(DUPLICATE_EMAIL_MESSAGE, 409));
+    }
+
+    const rawToken = generateRawToken();
+    user.pendingEmail = email;
+    user.pendingEmailToken = hashToken(rawToken);
+    user.pendingEmailExpires = new Date(Date.now() + VERIFY_TOKEN_TTL_MS);
+    await user.save({ validateBeforeSave: false });
+
+    sendVerificationEmail({ to: email, name: user.name, rawToken });
+
+    res.json({ success: true, data: publicUser(user) });
+});
+
+/** POST /auth/2fa/setup â€” mints a secret and a QR the app can scan. Not yet on. */
+export const setupTwoFactor = catchAsync(async (req, res) => {
+    const secret = generateSecret();
+    await User.updateOne({ _id: req.user._id }, { $set: { twoFactorSecret: secret } });
+
+    const otpauthUrl = generateURI({ issuer: TOTP_ISSUER, label: req.user.email, secret });
+    const qrDataUrl = await QRCode.toDataURL(otpauthUrl);
+
+    res.json({ success: true, data: { secret, otpauthUrl, qrDataUrl } });
+});
+
+/** POST /auth/2fa/enable â€” confirms the secret with a code and switches 2FA on. */
+export const enableTwoFactor = catchAsync(async (req, res, next) => {
+    const user = await User.findById(req.user._id).select('+twoFactorSecret');
+    if (!user?.twoFactorSecret) {
+        return next(new AppError('Start the two-factor setup first.', 400));
+    }
+
+    const valid = await verifyTotp(user.twoFactorSecret, req.body.code);
+    if (!valid) {
+        return next(new AppError('That code is not correct. Try the next one.', 400));
+    }
+
+    const recoveryCodes = Array.from({ length: RECOVERY_CODE_COUNT }, () =>
+        crypto.randomBytes(6).toString('hex'),
+    );
+
+    user.twoFactorEnabled = true;
+    user.twoFactorRecoveryCodes = recoveryCodes.map(hashToken);
+    await user.save({ validateBeforeSave: false });
+
+    // Plaintext recovery codes exist only in this response.
+    res.json({ success: true, data: { recoveryCodes } });
+});
+
+/** POST /auth/2fa/disable â€” re-authenticates, then turns 2FA off. */
+export const disableTwoFactor = catchAsync(async (req, res, next) => {
+    const user = await User.findById(req.user._id).select(
+        '+password +twoFactorSecret +twoFactorRecoveryCodes',
+    );
+    if (!user) return next(new AppError('User not found', 404));
+
+    if (!(await user.comparePassword(req.body.password))) {
+        return next(new AppError('Your password is incorrect', 401));
+    }
+    if (!user.twoFactorEnabled) {
+        return next(new AppError('Two-factor authentication is not enabled.', 400));
+    }
+
+    let accepted = await verifyTotp(user.twoFactorSecret, req.body.code);
+    if (!accepted && Array.isArray(user.twoFactorRecoveryCodes)) {
+        accepted = user.twoFactorRecoveryCodes.includes(hashToken(String(req.body.code).trim()));
+    }
+    if (!accepted) {
+        return next(new AppError('That code is not correct.', 400));
+    }
+
+    user.twoFactorEnabled = false;
+    user.twoFactorSecret = undefined;
+    user.twoFactorRecoveryCodes = undefined;
+    await user.save({ validateBeforeSave: false });
+
+    res.json({ success: true, data: publicUser(user) });
+});
+
 export const forgotPassword = catchAsync(async (req, res) => {
     const email = normalizeEmail(req.body.email);
     const canonical = toCanonicalEmail(email);
 
-    // Matched on either form so accounts created before canonicalEmail
-    // existed are still reachable — losing the link for them would be a silent
-    // dead end that looks like "forgot password is broken".
     const user = await User.findOne({ $or: [{ email }, { canonicalEmail: canonical }] });
 
     if (user) {
-        // 32 bytes = 256 bits of entropy; there is no guessing the raw token.
-        const rawToken = crypto.randomBytes(32).toString('hex');
+        const rawToken = generateRawToken();
         user.passwordResetToken = hashToken(rawToken);
         user.passwordResetExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-
-        // validateBeforeSave: false skips the canonicalEmail validator, which
-        // does a DNS lookup on every save. Nothing here needs revalidating,
-        // and the save must not fail on something the account already passed.
         await user.save({ validateBeforeSave: false });
 
-        // Sent after the reply, not before it. Awaiting Resend in front of
-        // res.json() made the known-address branch hundreds of milliseconds
-        // slower than the unknown one — a usable signal for anyone probing
-        // which addresses are registered. The function reports its own
-        // failures to the log, so nothing is lost by not awaiting it.
         sendPasswordResetEmail({ to: user.email, name: user.name, rawToken });
     }
 
@@ -194,22 +486,13 @@ export const forgotPassword = catchAsync(async (req, res) => {
     });
 });
 
-/**
- * POST /auth/reset-password — consumes the emailed token and sets a new one.
- *
- * On success this issues a fresh session cookie too, so the customer lands
- * signed in rather than having to log in again — and, because `protect`
- * rejects anything issued before passwordChangedAt, every other session that
- * was open anywhere else dies on this save.
- */
 export const resetPassword = catchAsync(async (req, res, next) => {
     const { token, password } = req.body;
 
     const user = await User.findOne({
         passwordResetToken: hashToken(token),
         passwordResetExpires: { $gt: new Date() },
-    });
-
+    }).select('+tokenVersion');
     if (!user) {
         return next(
             new AppError(
@@ -220,32 +503,80 @@ export const resetPassword = catchAsync(async (req, res, next) => {
     }
 
     user.password = password; // hashed by the pre('save') hook
-    // Single-use: without this the link in a mailbox stays a credential for
-    // the full window, and a forwarded or later-exposed message would still
-    // work.
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
 
     await user.save({ validateBeforeSave: false });
 
-    const jwt = signToken(user._id);
-    sendTokenCookie(res, jwt);
+    // A reset proves the mailbox, so every other session is retired before a
+    // fresh one is handed to this browser.
+    await User.updateOne({ _id: user._id }, { $set: { refreshTokens: [] } });
+    await startSession(res, user);
 
     res.json({ success: true, data: publicUser(user) });
 });
 
 export const logout = catchAsync(async (req, res) => {
+    // Bumping tokenVersion retires every access token at once; the refresh
+    // token this browser holds is deleted so it cannot mint a new one.
+    if (req.user) {
+        await User.updateOne({ _id: req.user._id }, { $inc: { tokenVersion: 1 } });
+    }
+
+    const rawToken = req.cookies.refresh_token;
+    if (rawToken) {
+        const tokenHash = hashToken(rawToken);
+        await User.updateOne(
+            { 'refreshTokens.tokenHash': tokenHash },
+            { $pull: { refreshTokens: { tokenHash } } },
+        );
+    }
+
     clearTokenCookie(res);
+    clearRefreshCookie(res);
     res.json({ success: true, data: null });
 });
 
 export const getMe = catchAsync(async (req, res) => {
-    // req.user is attached by the `protect` middleware (next file) —
-    // by the time this runs, we already know the request is authenticated.
-    res.json({ success: true, data: req.user });
+    res.json({ success: true, data: publicUser(req.user) });
 });
 
-/** PATCH /api/v1/auth/users/:id/role — admin-only, promotes or demotes a user. */
+export const updateProfile = catchAsync(async (req, res, next) => {
+    const updates = {};
+    if (req.body.name !== undefined) updates.name = req.body.name;
+    if (req.body.phone !== undefined) updates.phone = req.body.phone;
+
+    const user = await User.findByIdAndUpdate(req.user._id, updates, {
+        returnDocument: 'after',
+        runValidators: true,
+    });
+
+    if (!user) return next(new AppError('User not found', 404));
+
+    res.json({ success: true, data: publicUser(user) });
+});
+
+export const changePassword = catchAsync(async (req, res, next) => {
+    const { currentPassword, password } = req.body;
+
+    const user = await User.findById(req.user._id).select('+password +tokenVersion');
+    if (!user) return next(new AppError('User not found', 404));
+
+    if (!(await user.comparePassword(currentPassword))) {
+        return next(new AppError('Your current password is incorrect', 401));
+    }
+
+    user.password = password; // hashed by the pre('save') hook
+    await user.save();
+
+    // Other devices lose their refresh tokens; this one gets a fresh pair.
+    await User.updateOne({ _id: user._id }, { $set: { refreshTokens: [] } });
+    await startSession(res, user);
+
+    res.json({ success: true, data: publicUser(user) });
+});
+
+/** PATCH /api/v1/auth/users/:id/role â€” admin-only, promotes or demotes a user. */
 export const updateUserRole = catchAsync(async (req, res, next) => {
     const { role } = req.body;
 
@@ -263,17 +594,6 @@ export const updateUserRole = catchAsync(async (req, res, next) => {
     res.json({ success: true, data: { id: user._id, name: user.name, email: user.email, role: user.role } });
 });
 
-/**
- * PATCH /api/v1/auth/users/:id/status — admin-only, suspends or reinstates an
- * account. This is the "remove a customer" action that does not exist as a
- * delete, and deliberately so: Order.user is a real reference, so deleting the
- * user would orphan every order they ever placed.
- *
- * Guards worth noting:
- *  - an admin cannot suspend themselves, which is the usual way a store ends
- *    up with exactly one admin and nobody able to undo it;
- *  - the last remaining active admin cannot be suspended, for the same reason.
- */
 export const updateUserStatus = catchAsync(async (req, res, next) => {
     const { isActive } = req.body;
 
@@ -323,22 +643,12 @@ export const updateUserStatus = catchAsync(async (req, res, next) => {
     });
 });
 
-/**
- * GET /api/v1/auth/users — admin-only, lists everyone for the Users page.
- *
- * Paginated like the rest of the admin lists. This used to return every
- * account in the collection at once, which grows without limit and meant a
- * single request had to load the full user table into memory and over the
- * wire. `meta.total` drives the pager.
- */
 export const getAllUsers = catchAsync(async (req, res) => {
     const page = Math.max(1, Number(req.safeQuery.page) || 1);
     const limit = Math.min(Math.max(1, Number(req.safeQuery.limit) || 20), 100);
     const filter = {};
 
     if (req.safeQuery.search) {
-        // Escaped for the same reason the admin order search is: unescaped,
-        // `?search=` reaches the regex engine verbatim.
         const term = String(req.safeQuery.search)
             .slice(0, 50)
             .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -347,8 +657,9 @@ export const getAllUsers = catchAsync(async (req, res) => {
             { email: { $regex: term, $options: 'i' } },
         ];
     }
-    if (req.safeQuery.role) {
-        filter.role = req.safeQuery.role;
+    const role = asScalar(req.safeQuery.role);
+    if (role) {
+        filter.role = role;
     }
 
     const [users, total] = await Promise.all([
@@ -362,3 +673,4 @@ export const getAllUsers = catchAsync(async (req, res) => {
 
     res.json({ success: true, data: users, meta: { total, page, limit } });
 });
+

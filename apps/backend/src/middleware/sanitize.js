@@ -47,6 +47,18 @@ export function sanitizeQuery(query) {
     return clean;
 }
 
+/**
+ * Collapses an HTTP parameter-pollution attempt to nothing.
+ *
+ * `?status=new&status=replied` arrives as an array. Assigned straight into a
+ * Mongo filter that becomes `{$in: [...]}`, which silently broadens the query
+ * rather than failing. These filters only ever expect one value, so anything
+ * that is not a plain string is dropped.
+ */
+export function asScalar(value) {
+    return typeof value === 'string' ? value : undefined;
+}
+
 export function sanitizeRequest(req, res, next) {
     sanitizeInPlace(req.body);
     sanitizeInPlace(req.params);

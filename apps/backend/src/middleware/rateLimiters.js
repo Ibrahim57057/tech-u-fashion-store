@@ -69,6 +69,42 @@ export const paymentLimiter = perUserLimiter({
 });
 
 /**
+ * PATCH /auth/me/password. Signed in, but the endpoint takes the current
+ * password, so this bounds guessing it from a stolen session. Five a quarter
+ * hour is far past a person mistyping, and per account so it cannot be reset
+ * by changing address.
+ */
+export const changePasswordLimiter = perUserLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: 'Too many attempts. Please wait a few minutes and try again.',
+});
+
+/** POST /auth/resend-verification and POST /auth/verify-email. Bounds the mail
+ *  we send and how fast a token can be guessed (256 bits, so the latter is only
+ *  a cheap guard). */
+export const verificationLimiter = perUserLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: 'Too many requests. Please wait a few minutes and try again.',
+});
+
+/** POST /auth/2fa/authenticate — the code is only six digits, so this is the
+ *  real defence against guessing it. */
+export const twoFactorLimiter = perUserLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: 'Too many verification attempts. Please wait and try again.',
+});
+
+/** POST /auth/refresh — cheap endpoint, but a session rotates on every call. */
+export const refreshLimiter = perUserLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    message: 'Too many session refreshes. Please log in again.',
+});
+
+/**
  * POST /auth/forgot-password. Unauthenticated, so perUserKey falls back to the
  * IP — which is the right key here anyway, since the thing being rate-limited
  * is the mail we send out, not an account.

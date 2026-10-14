@@ -9,35 +9,71 @@ const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1'
  */
 export const API_BASE_URL = BASE_URL;
 
-async function request(path, { method = 'GET', body } = {}) {
-    const res = await fetch(`${BASE_URL}${path}`, {
-        method,
-        credentials: 'include', // send/receive the httpOnly login cookie
-        headers: body ? { 'Content-Type': 'application/json' } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-    });
+// Access cookies last 15 minutes, so a tab left open will hit a 401 long
+// before the customer is really signed out. The first such response kicks off
+// one refresh; every other request that failed alongside it waits on the same
+// promise rather than starting a second (which would each rotate the token and
+// invalidate the others).
+let refreshInFlight = null;
 
-    const json = await res.json().catch(() => null);
+function refreshSession() {
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(`${BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+      .then((res) => res.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
 
-    if (!res.ok || !json?.success) {
-        const details = json?.error?.details; // per-field Zod issues, when present
-        const error = new Error(
-            details?.[0]?.message ||
-                json?.error?.message ||
-                `Request failed (${res.status})`,
-        );
-        // Form pages need to know WHICH field failed, not just the first
-        // message — key them by the path the backend reported.
-        const fields = Object.fromEntries((details ?? []).map((d) => [d.path, d.message]));
-        error.fields = fields;
-        // Both names are set because form pages use both spellings; the alias
-        // keeps either working without touching every call site.
-        error.fieldErrors = fields;
-        error.status = res.status;
-        throw error;
+// A wrong password is also a 401; refreshing around it would be pointless and
+// would swap a valid session for an irrelevant one, so these are left alone.
+const NO_REFRESH = ['/auth/login', '/auth/register', '/auth/refresh'];
+
+async function request(path, { method = 'GET', body } = {}, allowRefresh = true) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    credentials: 'include', // send/receive the httpOnly login cookie
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (
+    res.status === 401 &&
+    allowRefresh &&
+    !NO_REFRESH.some((prefix) => path.startsWith(prefix))
+  ) {
+    if (await refreshSession()) {
+      return request(path, { method, body }, false);
     }
+  }
 
-    return json;
+  const json = await res.json().catch(() => null);
+
+  if (!res.ok || !json?.success) {
+    const details = json?.error?.details; // per-field Zod issues, when present
+    const error = new Error(
+      details?.[0]?.message ||
+        json?.error?.message ||
+        `Request failed (${res.status})`,
+    );
+    // Form pages need to know WHICH field failed, not just the first
+    // message �?" key them by the path the backend reported.
+    const fields = Object.fromEntries((details ?? []).map((d) => [d.path, d.message]));
+    error.fields = fields;
+    // Both names are set because form pages use both spellings; the alias
+    // keeps either working without touching every call site.
+    error.fieldErrors = fields;
+    error.status = res.status;
+    throw error;
+  }
+
+  return json;
 }
 
 /**

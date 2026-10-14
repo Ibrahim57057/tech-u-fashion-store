@@ -4,6 +4,11 @@ import { Shield } from "lucide-react";
 import { useAuth } from "../hooks/useAuth.js";
 import { canAccessAdmin } from "../features/admin/permissions.js";
 import { useMyOrders } from "../hooks/useMyOrders.js";
+import ProfileForm from "../features/auth/ProfileForm.jsx";
+import ChangePasswordForm from "../features/auth/ChangePasswordForm.jsx";
+import ChangeEmailForm from "../features/auth/ChangeEmailForm.jsx";
+import TwoFactorSection from "../features/auth/TwoFactorSection.jsx";
+import VerifyEmailBanner from "../features/auth/VerifyEmailBanner.jsx";
 import Button from "../components/ui/Button.jsx";
 import Skeleton from "../components/ui/Skeleton.jsx";
 import EmptyState from "../components/ui/EmptyState.jsx";
@@ -60,6 +65,41 @@ export default function AccountPage() {
           Open admin panel
         </Link>
       )}
+
+      <section className='mb-8 border border-neutral-200 rounded-card p-5'>
+        <h2 className='font-display font-semibold text-lg text-brand-dark mb-4'>
+          Personal details
+        </h2>
+        {!user.isEmailVerified && <VerifyEmailBanner />}
+        <ProfileForm />
+      </section>
+
+      <section className='mb-8 border border-neutral-200 rounded-card p-5'>
+        <h2 className='font-display font-semibold text-lg text-brand-dark mb-1'>
+          Change email
+        </h2>
+        <p className='text-sm text-neutral-500 mb-4'>
+          We confirm the new address before it takes effect.
+        </p>
+        <ChangeEmailForm />
+      </section>
+
+      <section className='mb-8 border border-neutral-200 rounded-card p-5'>
+        <h2 className='font-display font-semibold text-lg text-brand-dark mb-4'>
+          Two-factor authentication
+        </h2>
+        <TwoFactorSection />
+      </section>
+
+      <section className='mb-8 border border-neutral-200 rounded-card p-5'>
+        <h2 className='font-display font-semibold text-lg text-brand-dark mb-1'>
+          Change password
+        </h2>
+        <p className='text-sm text-neutral-500 mb-4'>
+          Changing your password signs out every other device.
+        </p>
+        <ChangePasswordForm />
+      </section>
 
       <h2 className='font-display font-semibold text-lg text-brand-dark mb-4'>
         Order history

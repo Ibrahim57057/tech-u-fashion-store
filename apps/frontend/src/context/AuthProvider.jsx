@@ -52,8 +52,32 @@ export function AuthProvider({ children }) {
         method: "POST",
         body: { email, password },
       });
+      // With 2FA on, a correct password only earns a short-lived ticket. No
+      // session exists yet, so there is nothing to store until the code is
+      // supplied via completeTwoFactor.
+      if (next?.twoFactorRequired) {
+        return { twoFactorRequired: true, ticket: next.ticket };
+      }
       clearCachedAccountData();
       setUser(next);
+      return next;
+    },
+    [clearCachedAccountData],
+  );
+
+  /**
+   * Finishes a login that stopped at the 2FA step, exchanging the password
+   * ticket plus a code for a real session.
+   */
+  const completeTwoFactor = useCallback(
+    async ({ ticket, code }) => {
+      const next = await apiFetch("/auth/2fa/authenticate", {
+        method: "POST",
+        body: { ticket, code },
+      });
+      clearCachedAccountData();
+      setUser(next);
+      return next;
     },
     [clearCachedAccountData],
   );
@@ -103,6 +127,100 @@ export function AuthProvider({ children }) {
     [clearCachedAccountData],
   );
 
+  /**
+   * Edits the signed-in customer's own details. Only name and phone are sent;
+   * the backend ignores anything else, so this cannot be used to grant a role
+   * or flip the account's status. The cache is left alone — the identity has
+   * not changed, so the orders already on screen are still the right ones.
+   */
+  const updateProfile = useCallback(async ({ name, phone }) => {
+    const next = await apiFetch("/auth/me", {
+      method: "PATCH",
+      body: { name, phone },
+    });
+    setUser(next);
+    return next;
+  }, []);
+
+  /**
+   * Changes the password while signed in. The backend re-issues the session
+   * cookie here, so storing the returned user keeps this browser signed in
+   * while every other session for the account is invalidated.
+   */
+  const changePassword = useCallback(
+    async ({ currentPassword, password, confirmPassword }) => {
+      const next = await apiFetch("/auth/me/password", {
+        method: "PATCH",
+        body: { currentPassword, password, confirmPassword },
+      });
+      setUser(next);
+      return next;
+    },
+    [],
+  );
+
+  /**
+   * Confirms an address from an emailed link. This both finishes a signup and
+   * applies a pending email change. When a session is already open (the
+   * change-email case) the returned user replaces the cached one so the new
+   * address shows immediately; a confirmation opened on another device leaves
+   * the signed-in state untouched.
+   */
+  const verifyEmail = useCallback(async ({ token }) => {
+    const next = await apiFetch("/auth/verify-email", {
+      method: "POST",
+      body: { token },
+    });
+    setUser((prev) => (prev ? next : prev));
+    return next;
+  }, []);
+
+  /** Sends a fresh signup-confirmation email to the signed-in account. */
+  const resendVerification = useCallback(async () => {
+    return apiFetch("/auth/resend-verification", { method: "POST" });
+  }, []);
+
+  /**
+   * Starts an email change. The address is only held as pending until the new
+   * mailbox confirms it; the current address remains the login until then.
+   */
+  const changeEmail = useCallback(async ({ email, password }) => {
+    const next = await apiFetch("/auth/me/email", {
+      method: "PATCH",
+      body: { email, password },
+    });
+    setUser(next);
+    return next;
+  }, []);
+
+  /** Returns { secret, otpauthUrl, qrDataUrl } for the authenticator app. */
+  const setupTwoFactor = useCallback(async () => {
+    return apiFetch("/auth/2fa/setup", { method: "POST" });
+  }, []);
+
+  /**
+   * Turns 2FA on with a code from the app. Returns the one-time recovery codes,
+   * which the backend only ever sends in this response.
+   */
+  const enableTwoFactor = useCallback(async ({ code }) => {
+    const data = await apiFetch("/auth/2fa/enable", {
+      method: "POST",
+      body: { code },
+    });
+    setUser((prev) => (prev ? { ...prev, twoFactorEnabled: true } : prev));
+    return data.recoveryCodes;
+  }, []);
+
+  /** Turns 2FA off, re-authenticating with the password and a current code. */
+  const disableTwoFactor = useCallback(async ({ password, code }) => {
+    const next = await apiFetch("/auth/2fa/disable", {
+      method: "POST",
+      body: { password, code },
+    });
+    setUser(next);
+    return next;
+  }, []);
+
   const logout = useCallback(async () => {
     // Cleared regardless of what the server said: the cookie is the session,
     // and leaving the user rendered as signed in after a failed logout is
@@ -119,14 +237,40 @@ export function AuthProvider({ children }) {
     () => ({
       user,
       login,
+      completeTwoFactor,
       register,
       logout,
       forgotPassword,
       resetPassword,
+      updateProfile,
+      changeEmail,
+      changePassword,
+      verifyEmail,
+      resendVerification,
+      setupTwoFactor,
+      enableTwoFactor,
+      disableTwoFactor,
       isAuthenticated: !!user,
       isLoading,
     }),
-    [user, login, register, logout, forgotPassword, resetPassword, isLoading],
+    [
+      user,
+      login,
+      completeTwoFactor,
+      register,
+      logout,
+      forgotPassword,
+      resetPassword,
+      updateProfile,
+      changeEmail,
+      changePassword,
+      verifyEmail,
+      resendVerification,
+      setupTwoFactor,
+      enableTwoFactor,
+      disableTwoFactor,
+      isLoading,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

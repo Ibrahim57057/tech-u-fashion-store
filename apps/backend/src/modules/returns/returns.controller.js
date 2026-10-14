@@ -2,6 +2,7 @@ import Return from './return.model.js';
 import Order from '../orders/order.model.js';
 import { catchAsync } from '../../middleware/catchAsync.js';
 import { AppError } from '../../middleware/errorHandler.js';
+import { asScalar } from '../../middleware/sanitize.js';
 import { ORDER_STATUS } from '../../utils/constants.js';
 
 /** POST /api/v1/returns — a customer requesting a return on their own delivered order. */
@@ -45,7 +46,8 @@ export const getAllReturns = catchAsync(async (req, res) => {
     const limit = Math.min(Math.max(1, Number(req.safeQuery.limit) || 20), 100);
 
     const filter = {};
-    if (req.safeQuery.status) filter.status = req.safeQuery.status;
+    const status = asScalar(req.safeQuery.status);
+    if (status) filter.status = status;
 
     const [returns, total] = await Promise.all([
         Return.find(filter)

@@ -16,7 +16,7 @@ import { safeDestination } from '../../lib/safeDestination.js';
  */
 
 export default function LoginForm() {
-  const { login } = useAuth();
+  const { login, completeTwoFactor } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const from = searchParams.get('from');
@@ -24,6 +24,10 @@ export default function LoginForm() {
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  // Set when the password was accepted and the account wants a 2FA code. The
+  // ticket is the only thing that carries the half-finished login.
+  const [ticket, setTicket] = useState(null);
+  const [code, setCode] = useState('');
 
   function validate() {
     const next = {};
@@ -41,13 +45,70 @@ export default function LoginForm() {
     setServerError(null);
     setSubmitting(true);
     try {
-      await login(form);
+      const result = await login(form);
+      if (result?.twoFactorRequired) {
+        setTicket(result.ticket);
+        return;
+      }
       navigate(safeDestination(searchParams.get('from')), { replace: true });
     } catch (err) {
       setServerError(err.message);
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleVerify(e) {
+    e.preventDefault();
+    setServerError(null);
+    setSubmitting(true);
+    try {
+      await completeTwoFactor({ ticket, code });
+      navigate(safeDestination(searchParams.get('from')), { replace: true });
+    } catch (err) {
+      setServerError(err.message);
+      setCode('');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (ticket) {
+    return (
+      <form onSubmit={handleVerify} className="space-y-4 max-w-sm mx-auto">
+        <p className="text-sm text-neutral-600 text-center">
+          Enter the code from your authenticator app.
+        </p>
+        <Input
+          label="Authentication code"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          autoFocus
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="123456"
+        />
+        <p className="text-xs text-neutral-500 text-center -mt-2">
+          You can also use one of your recovery codes.
+        </p>
+
+        {serverError && <p className="text-sm text-danger text-center">{serverError}</p>}
+
+        <Button type="submit" className="w-full" disabled={submitting || !code}>
+          {submitting ? 'Verifying…' : 'Verify and log in'}
+        </Button>
+        <button
+          type="button"
+          onClick={() => {
+            setTicket(null);
+            setCode('');
+            setServerError(null);
+          }}
+          className="w-full text-sm text-neutral-500 hover:underline">
+          Back to login
+        </button>
+      </form>
+    );
   }
 
   return (

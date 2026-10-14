@@ -2,6 +2,16 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { normalizeEmail, toCanonicalEmail } from '../../utils/emailValidation.js';
 
+// One active refresh session. Only the SHA-256 of the cookie value is stored,
+// so a database dump cannot be replayed as a login.
+const refreshTokenSchema = new mongoose.Schema(
+    {
+        tokenHash: { type: String, required: true },
+        expiresAt: { type: Date, required: true },
+    },
+    { timestamps: true, _id: false },
+);
+
 const userSchema = new mongoose.Schema(
     {
         name: { type: String, required: true, trim: true },
@@ -43,6 +53,18 @@ const userSchema = new mongoose.Schema(
         // adding this does not lock anyone out on deploy.
         isActive: { type: Boolean, default: true },
 
+        // Bumped on logout so every cookie issued before it stops being
+        // accepted (see middleware/auth.js). JWTs are stateless, so without
+        // this a logout only clears the browser's copy — a stolen cookie would
+        // keep working for its full 30 days.
+        tokenVersion: { type: Number, default: 0, select: false },
+
+        // Failed sign-in tracking. After MAX_LOGIN_ATTEMPTS the account is
+        // locked for a cooling-off window, which the per-IP limiter alone
+        // cannot do: an attacker with a pool of addresses is not slowed by it.
+        failedLoginAttempts: { type: Number, default: 0, select: false },
+        lockUntil: { type: Date, select: false },
+
         // --- Password reset ------------------------------------------------
         // Only the SHA-256 of the token is stored, never the token itself.
         // A leaked database dump must not be enough to take over accounts:
@@ -65,6 +87,33 @@ const userSchema = new mongoose.Schema(
         // Not set on registration, because there is no earlier session to
         // invalidate and undefined is treated as "always valid".
         passwordChangedAt: { type: Date },
+
+        // --- Email confirmation --------------------------------------------
+        // False until the address is confirmed from the emailed link. Existing
+        // rows have no field at all; treat undefined as unverified so the
+        // account page still nags until they confirm.
+        isEmailVerified: { type: Boolean, default: false },
+        emailVerificationToken: { type: String, select: false },
+        emailVerificationExpires: { type: Date, select: false },
+
+        // A requested email change, held until the NEW address confirms it.
+        // The current email stays the login identifier until then, so a
+        // mistyped change can never lock anyone out.
+        pendingEmail: { type: String, lowercase: true, trim: true },
+        pendingEmailToken: { type: String, select: false },
+        pendingEmailExpires: { type: Date, select: false },
+
+        // --- Two-factor authentication -------------------------------------
+        twoFactorEnabled: { type: Boolean, default: false },
+        twoFactorSecret: { type: String, select: false },
+        // SHA-256 of each single-use recovery code. Plaintext exists only in
+        // the one response that generates them.
+        twoFactorRecoveryCodes: { type: [String], select: false, default: undefined },
+
+        // --- Refresh sessions ----------------------------------------------
+        // Rotated on every refresh. Capped at five so old devices do not
+        // accumulate forever.
+        refreshTokens: { type: [refreshTokenSchema], select: false, default: [] },
     },
     { timestamps: true },
 );

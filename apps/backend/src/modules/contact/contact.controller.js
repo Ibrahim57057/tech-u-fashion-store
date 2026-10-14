@@ -1,6 +1,7 @@
 import Message from './message.model.js';
 import { catchAsync } from '../../middleware/catchAsync.js';
 import { AppError } from '../../middleware/errorHandler.js';
+import { asScalar } from '../../middleware/sanitize.js';
 
 /**
  * POST /api/v1/contact
@@ -40,7 +41,8 @@ export const getMessages = catchAsync(async (req, res) => {
     const page = Math.max(1, Number(req.safeQuery.page) || 1);
     const limit = Math.min(Math.max(1, Number(req.safeQuery.limit) || 20), 100);
     const filter = {};
-    if (req.safeQuery.status) filter.status = req.safeQuery.status;
+    const status = asScalar(req.safeQuery.status);
+    if (status) filter.status = status;
 
     const [messages, total, unread] = await Promise.all([
         Message.find(filter).sort('-createdAt').skip((page - 1) * limit).limit(limit),

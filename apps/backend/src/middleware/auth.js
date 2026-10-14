@@ -17,9 +17,20 @@ export const protect = catchAsync(async (req, res, next) => {
         return next(new AppError('Invalid or expired session. Please log in again.', 401));
     }
 
-    const user = await User.findById(decoded.id);
+    // A 2FA ticket proves the password only; it must never act as a session.
+    if (decoded.scope) {
+        return next(new AppError('You are not logged in. Please log in to continue.', 401));
+    }
+
+    const user = await User.findById(decoded.id).select('+tokenVersion');
     if (!user) {
         return next(new AppError('The user for this session no longer exists.', 401));
+    }
+
+    // Revoked on logout: the signature is still valid, but the token was
+    // issued before the account's current tokenVersion, so it is refused.
+    if ((user.tokenVersion ?? 0) !== (decoded.tv ?? 0)) {
+        return next(new AppError('Your session is no longer valid. Please log in again.', 401));
     }
 
     // A suspended account is refused here, not only at login. The token in the
@@ -62,14 +73,17 @@ export const optionalAuth = catchAsync(async (req, res, next) => {
 
     try {
         const decoded = verifyToken(token);
-        const user = await User.findById(decoded.id);
-        // Same password-change check as `protect`, but it drops the request
-        // to guest instead of failing: optionalAuth exists precisely so a
-        // stale or otherwise unusable cookie never blocks a guest.
+        if (decoded.scope) return next();
+        const user = await User.findById(decoded.id).select('+tokenVersion');
+        // Same password-change and revocation checks as `protect`, but it
+        // drops the request to guest instead of failing: optionalAuth exists
+        // precisely so a stale or otherwise unusable cookie never blocks a
+        // guest.
         const stale =
-            user?.passwordChangedAt &&
-            decoded.iat &&
-            decoded.iat * 1000 < user.passwordChangedAt.getTime();
+            (user?.passwordChangedAt &&
+                decoded.iat &&
+                decoded.iat * 1000 < user.passwordChangedAt.getTime()) ||
+            (user && (user.tokenVersion ?? 0) !== (decoded.tv ?? 0));
         if (user && !stale) req.user = user;
     } catch {
         // Bad or expired token: treat as a guest instead of failing.
